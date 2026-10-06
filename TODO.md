@@ -5,9 +5,9 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**M2 (graph model + force layout + viewport, plan §19) is under way: steps 1 and 2, the graph
-store and `ResolvedMetrics`, are done (`## M2` below); step 3, the force layout, is next.** M2
-in this order, each step green on its own:
+**M2 (graph model + force layout + viewport, plan §19) is under way: steps 1 to 3, the graph
+store, `ResolvedMetrics` and the force layout, are done (`## M2` below); step 4, the snapper
+and viewport, is next.** M2 in this order, each step green on its own:
 
 1. ~~The graph store~~ (plan §4): landed.
 2. ~~`ResolvedMetrics`~~ (plan §5): landed. `GraphView::pending` now holds every commit's
@@ -15,15 +15,20 @@ in this order, each step green on its own:
    edits, which re-snap with an unchanged box. Steps 3 and 4 consume it; nothing clears it yet.
    No `Payload::Label`: a node's text is part of its `NodeBox` form (see the decision), so
    §7.4's `Label{..}` waits for free-standing text, if any.
-3. Harvest `seed/graph/layout_fr.rs` and its tests by the §18 two-commit procedure into
-   `layout/force/` (`ForceLayout`, both repulsion modes, honored `iterations`, no placement-time
-   aspect squash, `fmath` throughout), with invariants F and M. Its collision terms read box
-   sizes from `ResolvedMetrics::form` (width in columns, height in rows, which the isotropic
-   world of plan §6 scales by `1 / cell_aspect`); `nodes_in_order` and `edges_in_order` are its
-   iteration order.
+3. ~~The force layout~~ (plan §8): landed as `layout::force::engine::lay_out(params, store,
+   metrics, Frame { area, cell_aspect }, added, positions)`, world positions (node centers) by
+   slot. Nothing calls it outside tests yet, so its modules carry `expect(dead_code)`.
 4. `GridSnapper` and the viewport (plan §6): isotropic `Fit::Contain`, `cell_aspect` once, the
    50-ring spiral, the enforced 2-row gap, canonical/derived split, zoom-out re-snap, anchor
-   compensation; invariants A, G and I.
+   compensation; invariants A, G and I. Port the staged `geometry/snap{,_tests}.seed.rs` (the
+   move commit is done). With it the layout goes live: `GraphView` holds the viewport (a
+   default size until the first render, to be decided), the world positions and `ForceParams`
+   (the builder's `layout(LayoutKind::Force(..))`), runs `lay_out` synchronously at the end of
+   a `Topology` `update` (plan §4.2) with the commit's `added`, places `repinned` nodes at their
+   pins, and lets the snapper consume `reshaped` and `repinned`, clearing `pending`. Decide
+   whether a semantic level change or a resize relayouts with survivors free (a reflow) or
+   capped as after a topology change (see the step 3 decision). `simulation::Run` takes one
+   step at a time, which is what `LayoutPacing::Animated` needs once `tick` exists.
 5. Layout → `SceneGraph` → `render_to_string`; T3 scene snapshots; the T4 tier with the
    `catena-render-hash` bin and committed hashes; invariants B–E and N on real scenes.
 6. The zero-allocation frame test, the first criterion bench, `scripts/check-perf.sh` with
@@ -35,7 +40,8 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
 
 - **M2 step 3: `layout_fr.rs` splits three ways.** Its FR core is ported in
   `layout/force/simulation.rs`, a rewrite of the loop, so `git show -M20%` pairs the staged seed
-  with `ring.seed.rs`, its largest verbatim slice, and shows the simulation as new. `snap_to_grid`, `bounding_box` and `rect_overlaps` with their tests are staged verbatim as
+  with `ring.seed.rs`, its largest verbatim slice, and shows the simulation as new.
+  `snap_to_grid`, `bounding_box` and `rect_overlaps` with their tests are staged verbatim as
   `geometry/snap{,_tests}.seed.rs` for step 4, and `radial_layout`, `centroid`,
   `max_distance_from` (with `rect_overlaps`) and their tests as
   `layout/force/ring{,_tests}.seed.rs` for the peripheral ring. The staged files are byte-exact
@@ -541,6 +547,16 @@ Plan §19, in the six steps of `## Now`, each green on its own. The milestone cl
   'invariant_n_every_form_draws_exactly_its_measured_box\|labels_that_lay_out_alike_measure_alike\|applying_a_delta_keeps_only_the_reshapes_that_changed_a_box\|a_pinned_node_at_its_cap_shortens_its_label\|every_commit_is_measured_and_only_boxes_that_changed_stay_reshaped'
   | grep -qx 5 && cargo test -p catena -- geometry:: scene:: view:: && cargo insta test --check
   && test -z "$(git ls-files seed/ui/box_layout.rs seed/ui/box_layout_tests.rs)"`
+- [x] **Step 3: the force layout** — `layout_fr.rs` harvested by the §18 procedure: the FR core
+  (`ForceParams`, `Uniform` and `DegreeScaled` repulsion over a weighted quadtree, iterations
+  honored, no aspect squash, `fmath`), islands packed left to right, the peripheral ring,
+  warm start with neighbor placement and ramp-in, survivors annealing from `converge_eps`;
+  invariants F (over the new `fixtures::generated` families) and M (weighted θ = 0 against the
+  exact sum). The snapper's half of the seed waits staged in `geometry/snap*.seed.rs`.
+  verify: `cargo test -p catena -- --list | grep -c
+  'a_warm_relayout_after_five_percent_additions_keeps_nine_in_ten_survivors_within_two_cells\|weighted_bodies_at_theta_zero_match_the_weighted_brute_force_sum\|iterations_are_honored_as_given\|the_starting_circle_is_round\|degree_scaled_repulsion_weights_each_pair_by_both_masses\|islands_pack_left_to_right_largest_first\|isolated_nodes_ring_the_core'
+  | grep -qx 7 && cargo test -p catena -- layout::force && cargo test -p catena-testkit generated
+  && test -z "$(git ls-files seed/graph/layout_fr.rs seed/graph/layout_fr_tests.rs)"`
 
 ## Course correction (owner rulings A1–A4)
 
@@ -624,7 +640,8 @@ Each `verify:` lists the named tests first, because a test filter that matches n
   M4, M5); the `expect`s announce themselves, the `fmath` `allow` will not. M2 step 2 removed
   `raster::text`'s and narrowed `geometry::zoom`'s to `MIN_ZOOM`, `MAX_ZOOM` and
   `SemanticZoomTable::new` (step 4), with `ResolvedMetrics::{level, form, set_level}` waiting on
-  steps 3 to 5.
+  steps 3 to 5. M2 step 3 moved the quadtree's onto `layout::force`'s `engine`, `ring` and
+  `simulation` modules, which go live with step 4's wiring.
   verify: `! grep -rn "dead_code" catena/src`
 
 - [ ] **The `png` gallery (plan §16.4)** — `catena-testkit`'s `png` feature: `resvg`
