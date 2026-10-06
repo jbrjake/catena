@@ -5,8 +5,9 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-M0 step 1, last part: write `CONTRIBUTING.md` with the DCO sign-off requirement and the
-contributor license grant to the repository owner (GitHub `jbrjake`), per plan §3.
+M0 step 2: add the `xtask` crate (workspace member, `anyhow` + `regex` pinned `=x.y.z`) with
+`cargo xtask lint` implementing every plan §17 rule, each with a planted-violation test in
+`xtask`'s unit tests; then `scripts/smoke.sh`, `scripts/regression.sh` and `.githooks/`.
 
 ## Decisions
 
@@ -69,7 +70,7 @@ contributor license grant to the repository owner (GitHub `jbrjake`), per plan �
 - [x] **Workspace scaffold (plan §3.1)** — root and crate manifests, profiles, lints, alias-only
   `.cargo/config.toml`, one test target per crate, `thiserror`/`libm`/empty `fmath.rs` in
   `catena`. verify: `cargo build --workspace --all-targets && cargo test --workspace`
-- [ ] **CONTRIBUTING.md** — DCO sign-off plus the contributor license grant to `jbrjake` (plan
+- [x] **CONTRIBUTING.md** — DCO sign-off plus the contributor license grant to `jbrjake` (plan
   §3). verify: `grep -q Signed-off-by CONTRIBUTING.md && grep -qi "license grant" CONTRIBUTING.md`
 - [ ] **`cargo xtask lint`** — every §17 rule, each with a planted-violation test.
   verify: `cargo test -p xtask && cargo xtask lint`
