@@ -5,13 +5,24 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-A1 and A2 of the owner's course correction are done (`docs/design/owner-rulings.md`); A3 and
-A4 land with the code they shape (M1 scene, M3 controller, the radial view).
+**M0 is closed; M1 (raster + scene, plan §19) is next.** A1 and A2 of the owner's course
+correction are done; A3 lands in M1's scene, A4 with the M3 key table and the radial view. The
+owner's crates.io name reservation is recommended before M1 lands (plan §0); it does not block
+the work. M1 in this order, each step green on its own:
 
-Next, M0's last harvest: `git mv seed/tests/visual/svg_renderer.rs
-catena-testkit/src/svg.seed.rs` and `seed/tests/visual/snapshots.rs
-catena-testkit/src/svg_snapshots.seed.rs` (one commit, no content change; ported at M1). Then
-run the M0 gate's `verify:` and close M0.
+1. `Surface`, `CellStyle`, `PaletteColor`, `Attrs` and the in-memory `CellGrid` (`cell`,
+   `to_string`, `to_ansi_string`) in `catena/src/raster/`, with the §7.1 text-cell rule
+   (width-0 chars join the cell before them, a leading one is dropped, a width-2 symbol owns a
+   continuation cell).
+2. Port `catena-testkit/src/svg.seed.rs` and `svg_snapshots.seed.rs` onto `CellGrid` as
+   `catena-testkit/src/svg.rs` (`sha2` enters then): T3 live, with a committed `.hash` set and a
+   test that perturbs one color and watches T3 fail.
+3. `SubCellCanvas(SUB_W, SUB_H)` generalizing `BrailleCanvas` (taking `u16` dimensions, which
+   closes "Bound canvas allocation"), and the four blitters.
+4. The scene: `SceneGraph`, `SceneItem`, `Layer`, `Payload` (`#[non_exhaustive]`, A3), both
+   `Route` kinds, per-edge routes and shared segments (A3), `CountBadge` (A3), the compositor's
+   OR-merge, the label mask, and clipping with Cohen–Sutherland (which closes "Bound the work of
+   a huge segment"); `insta` and the first T2 goldens.
 
 ## Decisions
 
@@ -174,9 +185,9 @@ run the M0 gate's `verify:` and close M0.
   seed/graph/tree_layout_tests.rs)"`
 - [x] **Testkit fixtures** — `fixtures/community.json` moved verbatim, plus its loader.
   verify: `cargo test -p catena-testkit && test -z "$(git ls-files seed/fixtures)"`
-- [ ] **Stage the SVG renderer** for its M1 port. verify: `test -f catena-testkit/src/svg.seed.rs
+- [x] **Stage the SVG renderer** for its M1 port. verify: `test -f catena-testkit/src/svg.seed.rs
   && test -z "$(git ls-files seed/tests/visual)"`
-- [ ] **M0 gate** — verify: `./scripts/regression.sh && cargo test -p xtask && test -z "$(git
+- [x] **M0 gate** — verify: `./scripts/regression.sh && cargo test -p xtask && test -z "$(git
   ls-files seed/graph/braille.rs seed/graph/braille_tests.rs seed/graph/quadtree.rs
   seed/graph/chord.rs seed/graph/chord_tests.rs seed/graph/zoom.rs seed/ui/flex_layout.rs
   seed/graph/tree_layout.rs seed/graph/tree_layout_tests.rs seed/fixtures seed/tests/visual)" &&
