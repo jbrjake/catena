@@ -5,12 +5,13 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-M0 step 4, quadtree: `git mv seed/graph/quadtree.rs catena/src/layout/force/quadtree.seed.rs`
-(commit 1), then port it (commit 2). Write the regression tests first and watch them fail on the
-seed code: a `MAX_DEPTH` bucket (two points past the root bounds on one side) must match a
-brute-force oracle at θ = 0; a coincident pair at the bounds' max corner must keep every routed
-point inside its leaf; a coincident pair must exert no force on itself. Then fix (see Decisions)
-and tighten `theta_approximation_reasonable` to (0.7, 1.4).
+M0 step 4, chord: `git mv seed/graph/chord.rs` and `chord_tests.rs` to
+`catena/src/layout/radial/chord.seed.rs` and `chord_tests.seed.rs` (commit 1), then port (commit
+2): rename `community` → `group` and `entity` → `node` (`CommunityArc` → `GroupArc`,
+`place_communities` → `place_groups`, ids `i32` → `u32`), route `sin`/`cos` through new
+`fmath::sin`/`fmath::cos` (the tests' `powi(2)` become products), replace the `position()` scan
+in `place_entities` with an index map (red first: a test that a duplicated node index keeps the
+seed's first-occurrence slot), and drop the originating application's name from the header.
 
 ## Decisions
 
@@ -51,6 +52,9 @@ and tighten `theta_approximation_reasonable` to (0.7, 1.4).
   fixes both §18 bugs and a third found while porting: the seed's jittered copy sits √2·1e-4 from
   the true point, outside the 1e-4 self-skip radius, so a coincident pair repelled itself with
   force k².
+- **A port that rewrites most of a file needs `-M20%` to show as a rename.** The braille port
+  fell under git's default 50% similarity; `git show -M20% <port commit>` pairs it with its
+  staged seed file, so the delta from the seed stays reviewable.
 - **`chord` renames `entity` to `node` as well as `community` to `group`.** Plan §2.2 rules out
   domain vocabulary; the rest of the plan calls them nodes.
 - **`cargo xtask lint` details the plan leaves open.** Matching runs on source with comments and
@@ -89,7 +93,7 @@ and tighten `theta_approximation_reasonable` to (0.7, 1.4).
 - [x] **Harvest braille canvas + tests** → `catena/src/raster/`, the assert quartet →
   `catena-testkit/src/braille_asserts.rs`. verify: `cargo test -p catena raster && test -z
   "$(git ls-files seed/graph/braille.rs seed/graph/braille_tests.rs)"`
-- [ ] **Harvest quadtree** → `catena/src/layout/force/`, with the `MAX_DEPTH` and jitter fixes and
+- [x] **Harvest quadtree** → `catena/src/layout/force/`, with the `MAX_DEPTH` and jitter fixes and
   the force-ratio test tightened to (0.7, 1.4). verify: `cargo test -p catena quadtree && test -z
   "$(git ls-files seed/graph/quadtree.rs)"`
 - [ ] **Harvest chord + tests** → `catena/src/layout/radial/`, renamed, index-mapped, through

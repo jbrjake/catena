@@ -6,4 +6,5 @@
 //! frames on every platform. Terminal adapters live in `catena-ratatui`.
 
 mod fmath;
+mod layout;
 pub mod raster;
