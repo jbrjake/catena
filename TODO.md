@@ -74,6 +74,15 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
   halved ring cut through the core (the ring tests fail with it). The ring is round in world
   space; the seed squashed its height by half in cells. `lay_out` takes the commit's `added`
   set, whose slots start fresh even where `positions` still holds a removed node's place.
+- **M2 step 3: the generated families (plan §20) are `fixtures::generated(seed, n)`.** One
+  `SplitMix64` stream (checked against Vigna's reference outputs) draws, in order: each node's
+  group (one in twenty ungrouped, the rest in contiguous groups of about 12), label (one to
+  three words, 70% ASCII, else CJK, emoji or combining-mark words) and style values; then each
+  in-group pair joined with probability 0.3, each grouped node reaching out with probability
+  0.03, each ungrouped node twice; then `max(1, n / 50)` self-loops and `max(1, n / 40)`
+  parallel copies. Floats are kept to thousandths, like the community fixture's decimals,
+  because `serde_json`'s default parser can miss the last bit of a 17-digit float, and a
+  generated graph must read back from JSON unchanged.
 - **M2 step 3: coincident bodies do not push each other.** The kernel gives no force within
   1e-4 (the quadtree's coincidence rule, shared by the exact sum), so two free bodies at one
   point part only through other forces. Starting positions make that unlikely; a deterministic

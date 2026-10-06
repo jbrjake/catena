@@ -1,12 +1,16 @@
 //! Fixture graphs (plan §20).
 //!
-//! M0 carries the community graph, harvested from the seed, and its loader. The twelve
-//! canonical graphs and the seeded generators join it in later milestones.
+//! The community graph, harvested from the seed, and its loader; the seeded generator
+//! families ([`generated`]). The twelve canonical graphs join them in a later milestone.
 
 use std::collections::BTreeSet;
 use std::fmt;
 
 use serde::Deserialize;
+
+mod generated;
+
+pub use generated::{SplitMix64, generated};
 
 /// The largest fixture [`parse`] accepts, in bytes. The community graph is about 20 KiB.
 pub const MAX_FIXTURE_BYTES: usize = 8 * 1024 * 1024;
