@@ -33,6 +33,35 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
 
 ## Decisions
 
+- **M2 step 3: `layout_fr.rs` splits three ways.** Its FR core is ported in
+  `layout/force/simulation.rs`, a rewrite of the loop, so `git show -M20%` pairs the staged seed
+  with `ring.seed.rs`, its largest verbatim slice, and shows the simulation as new. `snap_to_grid`, `bounding_box` and `rect_overlaps` with their tests are staged verbatim as
+  `geometry/snap{,_tests}.seed.rs` for step 4, and `radial_layout`, `centroid`,
+  `max_distance_from` (with `rect_overlaps`) and their tests as
+  `layout/force/ring{,_tests}.seed.rs` for the peripheral ring. The staged files are byte-exact
+  slices of the moved file, as `word_wrap`'s copy was.
+- **M2 step 3: the simulation's arithmetic.** A world position is a node's center. Each body's
+  repelling mass is its weight (`Uniform`), times its degree plus one (`DegreeScaled`), and
+  the force on `i` is `mᵢ Σ mⱼ k² / d`, which is the seed's FR when every weight is 1. The
+  quadtree takes weighted bodies; a massless one keeps its place (emptiness is tested by body,
+  not by mass) and pushes nothing. At or below `bh_threshold` the exact sum runs on the tree's
+  own kernel, so θ = 0 matches it. Gravity stays unweighted, toward the unweighted centroid, as
+  in the seed; attraction is `weight · d² / k`. A pinned body pushes and pulls but never moves; a
+  move that would leave a coordinate non-finite is skipped. `ForceParams` is
+  `#[non_exhaustive]` with public fields, so a host edits a default or a preset (`quality`,
+  `fast`), and a run clamps its floats (NaN takes the default, `cooling` keeps to `0..=1`, the
+  rest to finite non-negative values) rather than refusing them.
+- **M2 step 3: a new body starts beside its neighbors.** A run is warm when any body has a
+  previous position (the seed's `has_seeds`). A new body in it starts half `k` from the mean of
+  its already-placed neighbors, turned by its index times the golden angle so siblings fan out;
+  with none placed, it starts on the circle around the placed bodies. The seed put every new
+  node on the cold circle around the origin, so its first steps dragged its neighbors across the
+  layout, which ramp-in only softens. The ramp scales what a new body exerts (its repelling mass
+  and its springs' pull on others) by `(step + 1) / ramp_in_iterations` until it is whole.
+- **M2 step 3: coincident bodies do not push each other.** The kernel gives no force within
+  1e-4 (the quadtree's coincidence rule, shared by the exact sum), so two free bodies at one
+  point part only through other forces. Starting positions make that unlikely; a deterministic
+  split by index is the fix if it shows.
 - **M2: `ResolvedMetrics` holds each node's measured form, not its position.** A form is the
   box's size and exactly what the node draws in it (`geometry::NodeForm`); the snapper (step 4)
   places it, and the positioned box is that origin plus this size. Plan §5's `boxes:

@@ -14,6 +14,7 @@ use std::f64::consts::PI;
 
 use crate::fmath;
 use crate::geometry::curve::Bezier;
+use crate::layout::count;
 
 /// A group's angular sector on the radial layout.
 #[derive(Debug, Clone)]
@@ -85,16 +86,6 @@ const INNER_RING_RATIO: f64 = 0.40;
 
 /// Outer ring radius as a fraction of canvas radius.
 const OUTER_RING_RATIO: f64 = 0.85;
-
-/// A count as `f64`. Node and group counts are bounded by `u32` indices (plan §4.1), far below
-/// the 2^53 where `f64` stops being exact.
-#[expect(
-    clippy::cast_precision_loss,
-    reason = "counts stay below 2^32, which f64 represents exactly"
-)]
-fn count(n: usize) -> f64 {
-    n as f64
-}
 
 /// Compute arc allocations for groups on the circumference.
 ///

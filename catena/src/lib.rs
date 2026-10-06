@@ -20,4 +20,5 @@ pub mod scene;
 mod view;
 
 pub use graph::{EdgeSpec, GraphError, NodeSpec};
+pub use layout::force::{ForceParams, Repulsion};
 pub use view::{DEFAULT_MAX_LABEL_COLS, GraphView, GraphViewBuilder};

@@ -269,3 +269,67 @@ fn theta_zero_matches_brute_force_on_awkward_inputs() {
         assert_close(got, want, &format!("point {i} at ({x}, {y})"));
     }
 }
+
+/// Body `i`'s mass in the weighted tests: zero for every seventh, else 0.5 to 3.5.
+fn mass_of(i: usize) -> f64 {
+    if i.is_multiple_of(7) {
+        0.0
+    } else {
+        0.5 + f64::from(u32::try_from(i % 4).expect("small"))
+    }
+}
+
+#[test]
+fn weighted_bodies_at_theta_zero_match_the_weighted_brute_force_sum() {
+    let points = awkward_points();
+    let mut tree = QuadTree::new(0.0, 0.0, 100.0, 100.0);
+    for (i, &(x, y)) in points.iter().enumerate() {
+        tree.insert_weighted(x, y, mass_of(i));
+    }
+    let total: f64 = (0..points.len()).map(mass_of).sum();
+    assert_close((tree.total_mass, 0.0), (total, 0.0), "total mass");
+    for (i, &(x, y)) in points.iter().enumerate() {
+        let want = points
+            .iter()
+            .enumerate()
+            .map(|(j, &p)| {
+                let (fx, fy) = brute_force(&[p], x, y, 7.0);
+                (fx * mass_of(j), fy * mass_of(j))
+            })
+            .fold((0.0, 0.0), |(ax, ay), (fx, fy)| (ax + fx, ay + fy));
+        let got = tree.compute_force(x, y, 0.0, 7.0);
+        assert_close(got, want, &format!("point {i} at ({x}, {y})"));
+    }
+}
+
+#[test]
+fn a_massless_body_keeps_its_place_and_exerts_nothing() {
+    let mut tree = QuadTree::new(0.0, 0.0, 100.0, 100.0);
+    tree.insert_weighted(10.0, 10.0, 0.0);
+    tree.insert_weighted(60.0, 60.0, 2.0);
+    tree.insert_weighted(80.0, 20.0, 0.0);
+    assert_eq!(tree.total_mass, 2.0);
+    assert_eq!(bodies(&tree), 3, "a massless body is not overwritten");
+    let want = brute_force(&[(60.0, 60.0)], 0.0, 0.0, 5.0);
+    assert_close(
+        tree.compute_force(0.0, 0.0, 0.0, 5.0),
+        (want.0 * 2.0, want.1 * 2.0),
+        "only the massive body pushes",
+    );
+    let mut only_massless = QuadTree::new(0.0, 0.0, 100.0, 100.0);
+    only_massless.insert_weighted(30.0, 30.0, 0.0);
+    only_massless.insert_weighted(70.0, 70.0, 0.0);
+    assert_eq!(bodies(&only_massless), 2);
+    assert_eq!(
+        only_massless.compute_force(50.0, 50.0, 0.8, 5.0),
+        (0.0, 0.0)
+    );
+}
+
+fn bodies(tree: &QuadTree) -> usize {
+    let here = usize::from(tree.body.is_some()) + tree.bucket.len();
+    here + tree
+        .children
+        .as_ref()
+        .map_or(0, |children| children.iter().map(bodies).sum())
+}

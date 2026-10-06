@@ -105,26 +105,32 @@ struct Body {
     /// True position: the only one centre of mass and force ever see.
     x: f64,
     y: f64,
+    /// How hard it repels: 1 for classic FR.
+    mass: f64,
     /// Where the tree files the body. Equal to the true position unless a coincident neighbour
     /// forced a nudge (see [`Bounds::nudge_inward`]).
     route: (f64, f64),
 }
 
 impl Body {
-    /// FR repulsion `k² / d` from this body on a point at `(x, y)`, with `d` floored at 0.01.
-    /// A point within `EPSILON` of the body is the body itself, or coincident with it: no
-    /// direction exists, so it feels nothing.
+    /// This body's repulsion on a point at `(x, y)`: its mass times [`repulsion`].
     fn repulsion_on(&self, x: f64, y: f64, k: f64) -> (f64, f64) {
-        let dx = x - self.x;
-        let dy = y - self.y;
-        let dist_sq = dx * dx + dy * dy;
-        if dist_sq < EPSILON * EPSILON {
-            return (0.0, 0.0);
-        }
-        let dist = dist_sq.sqrt().max(0.01);
-        let force = (k * k) / dist;
-        ((dx / dist) * force, (dy / dist) * force)
+        let (fx, fy) = repulsion(x - self.x, y - self.y, k);
+        (fx * self.mass, fy * self.mass)
     }
+}
+
+/// The FR repulsion `k² / d` of a unit mass on a point offset `(dx, dy)` from it, with `d`
+/// floored at 0.01. Within `EPSILON` the point is the body itself, or coincident with it: no
+/// direction exists, so it feels nothing. The one kernel the tree and the exact sum share.
+pub(super) fn repulsion(dx: f64, dy: f64, k: f64) -> (f64, f64) {
+    let dist_sq = dx * dx + dy * dy;
+    if dist_sq < EPSILON * EPSILON {
+        return (0.0, 0.0);
+    }
+    let dist = dist_sq.sqrt().max(0.01);
+    let force = (k * k) / dist;
+    ((dx / dist) * force, (dy / dist) * force)
 }
 
 /// Barnes-Hut quadtree for spatial partitioning of 2D point masses.
@@ -144,7 +150,7 @@ pub(crate) struct QuadTree {
     cx: f64,
     /// Aggregate center of mass y-coordinate.
     cy: f64,
-    /// Total number of bodies in this subtree (each body has mass 1).
+    /// The summed mass of this subtree's bodies.
     total_mass: f64,
     /// Four children: NW, NE, SW, SE. `None` for leaf nodes.
     children: Option<Box<[QuadTree; 4]>>,
@@ -178,38 +184,59 @@ impl QuadTree {
     }
 
     /// Insert a body at position (x, y) with mass 1.
+    #[cfg(test)]
     pub(crate) fn insert(&mut self, x: f64, y: f64) {
+        self.insert_weighted(x, y, 1.0);
+    }
+
+    /// Insert a body at position (x, y) with mass `mass`, which is finite and not negative. A
+    /// massless body is filed like any other and exerts no force.
+    pub(crate) fn insert_weighted(&mut self, x: f64, y: f64, mass: f64) {
         self.insert_depth(
             Body {
                 x,
                 y,
+                mass,
                 route: (x, y),
             },
             0,
         );
     }
 
+    /// Adds `body`'s mass to the centre of mass. While the subtree's mass is zero the centre
+    /// stays on its first body, so it is never 0 / 0.
     fn add_mass(&mut self, body: Body) {
-        let new_mass = self.total_mass + 1.0;
-        self.cx = (self.cx * self.total_mass + body.x) / new_mass;
-        self.cy = (self.cy * self.total_mass + body.y) / new_mass;
+        let new_mass = self.total_mass + body.mass;
+        if new_mass > 0.0 {
+            self.cx = (self.cx * self.total_mass + body.x * body.mass) / new_mass;
+            self.cy = (self.cy * self.total_mass + body.y * body.mass) / new_mass;
+        }
         self.total_mass = new_mass;
+    }
+
+    /// Whether the subtree holds no body. Not `total_mass == 0`: a massless body still takes
+    /// its place.
+    fn is_empty(&self) -> bool {
+        self.body.is_none() && self.bucket.is_empty() && self.children.is_none()
     }
 
     fn insert_depth(&mut self, body: Body, depth: u32) {
         // Safety valve: stop subdividing at extreme depth (coincident points).
         if depth >= MAX_DEPTH {
+            if self.is_empty() {
+                (self.cx, self.cy) = (body.x, body.y);
+            }
             self.add_mass(body);
             self.bucket.push(body);
             return;
         }
 
-        if self.total_mass == 0.0 {
+        if self.is_empty() {
             // Empty leaf: store the body directly.
             self.body = Some(body);
             self.cx = body.x;
             self.cy = body.y;
-            self.total_mass = 1.0;
+            self.total_mass = body.mass;
             return;
         }
 
