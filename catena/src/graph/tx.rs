@@ -51,6 +51,8 @@ pub(super) struct Changes<K> {
     pub(super) reshaped: BTreeSet<NodeIx>,
     /// Committed nodes whose pin changed.
     pub(super) repinned: BTreeSet<NodeIx>,
+    /// Committed nodes whose label changed.
+    pub(super) relabeled: BTreeSet<NodeIx>,
     /// Committed nodes whose sort key changed.
     pub(super) resorted: BTreeSet<NodeIx>,
 }
@@ -91,6 +93,7 @@ impl<'s, K: Key> Tx<'s, K> {
                 class: None,
                 reshaped: BTreeSet::new(),
                 repinned: BTreeSet::new(),
+                relabeled: BTreeSet::new(),
                 resorted: BTreeSet::new(),
             },
         }
@@ -155,6 +158,7 @@ impl<'s, K: Key> Tx<'s, K> {
         }
         self.changes.reshaped.remove(&ix);
         self.changes.repinned.remove(&ix);
+        self.changes.relabeled.remove(&ix);
         self.changes.resorted.remove(&ix);
         self.keys.insert(key.clone(), None);
         self.mark(DeltaClass::Topology);
@@ -258,6 +262,7 @@ impl<'s, K: Key> Tx<'s, K> {
         };
         let reshaped = box_may_change(current, &next);
         let repinned = current.pinned != next.pinned;
+        let relabeled = current.label != next.label;
         let resorted = current.order_key() != next.order_key();
         if let Some(NodeEdit::Added(Some((_, spec)))) = self.changes.nodes.get_mut(&ix) {
             *spec = next;
@@ -268,6 +273,9 @@ impl<'s, K: Key> Tx<'s, K> {
             }
             if repinned {
                 self.changes.repinned.insert(ix);
+            }
+            if relabeled {
+                self.changes.relabeled.insert(ix);
             }
             if resorted {
                 self.changes.resorted.insert(ix);

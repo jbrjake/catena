@@ -34,6 +34,9 @@ pub(crate) struct Delta {
     /// Surviving nodes whose pin was set, moved or cleared, to re-snap at the pin even when
     /// their box is as it was. Never an added slot.
     pub(crate) repinned: BTreeSet<NodeIx>,
+    /// Surviving nodes whose label text changed, to measure again: what they draw changed even
+    /// when their box cannot have (a property edit). Never an added slot.
+    pub(crate) relabeled: BTreeSet<NodeIx>,
 }
 
 impl Delta {
@@ -44,13 +47,17 @@ impl Delta {
             self.added.remove(&ix);
             self.reshaped.remove(&ix);
             self.repinned.remove(&ix);
+            self.relabeled.remove(&ix);
             self.removed.insert(ix);
         }
         self.added.extend(later.added);
         let added = &self.added;
+        let surviving = |ix: &NodeIx| !added.contains(ix);
         self.reshaped
-            .extend(later.reshaped.into_iter().filter(|ix| !added.contains(ix)));
+            .extend(later.reshaped.into_iter().filter(surviving));
         self.repinned
-            .extend(later.repinned.into_iter().filter(|ix| !added.contains(ix)));
+            .extend(later.repinned.into_iter().filter(surviving));
+        self.relabeled
+            .extend(later.relabeled.into_iter().filter(surviving));
     }
 }

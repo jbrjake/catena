@@ -385,6 +385,35 @@ fn a_pin_edit_lists_the_node_as_repinned_and_reshaped_only_when_the_marker_flips
 }
 
 #[test]
+fn a_label_edit_lists_the_node_as_relabeled_whatever_its_class() {
+    let mut s = with_nodes(&["a", "b"]);
+    let a = s.ix_of(&"a").expect("live");
+    let ((), same_box) = s
+        .transact(|tx| tx.set_node(&"a", |n| n.label = "b".into()))
+        .expect("known");
+    assert_eq!(
+        (same_box.class, same_box.reshaped, same_box.relabeled),
+        (Some(DeltaClass::Property), set(&[]), set(&[a])),
+        "what it draws changed, so it is measured again, though its box cannot have"
+    );
+    let ((), wider) = s
+        .transact(|tx| tx.set_node(&"a", |n| n.label = "日".into()))
+        .expect("known");
+    assert_eq!(
+        (wider.class, wider.reshaped, wider.relabeled),
+        (Some(DeltaClass::Geometry), set(&[a]), set(&[a]))
+    );
+    let ((), sorted) = s
+        .transact(|tx| {
+            tx.set_node(&"b", |n| n.sort_key = Some("0".into()))?;
+            tx.set_node(&"a", |n| n.label = "x".into())?;
+            tx.remove_node(&"a")
+        })
+        .expect("known");
+    assert!(sorted.relabeled.is_empty(), "{:?}", sorted.relabeled);
+}
+
+#[test]
 fn reshaped_lists_only_surviving_committed_nodes() {
     let mut s = with_nodes(&["a", "b"]);
     let ((), delta) = s
@@ -405,13 +434,14 @@ fn reshaped_lists_only_surviving_committed_nodes() {
 #[test]
 fn deltas_absorb_in_order() {
     let ix = NodeIx::new;
-    // Each reshaped node is repinned too, so `repinned` follows the same rules.
+    // Each reshaped node is repinned and relabeled too, so those sets follow the same rules.
     let delta = |class, added: &[NodeIx], removed: &[NodeIx], reshaped: &[NodeIx]| Delta {
         class,
         added: set(added),
         removed: set(removed),
         reshaped: set(reshaped),
         repinned: set(reshaped),
+        relabeled: set(reshaped),
     };
     let mut pending = delta(Some(DeltaClass::Geometry), &[], &[], &[ix(0), ix(1)]);
     pending.absorb(delta(Some(DeltaClass::Property), &[], &[], &[]));

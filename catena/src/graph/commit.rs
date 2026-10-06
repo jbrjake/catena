@@ -15,6 +15,7 @@ impl<K: Key> GraphStore<K> {
             class: Some(class),
             reshaped: changes.reshaped,
             repinned: changes.repinned,
+            relabeled: changes.relabeled,
             ..Delta::default()
         };
 
