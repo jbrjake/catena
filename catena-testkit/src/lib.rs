@@ -6,3 +6,4 @@
 //! dev-dependency triggers no AGPL obligations for the code under test.
 
 pub mod braille_asserts;
+pub mod fixtures;

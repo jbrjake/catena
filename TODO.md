@@ -5,12 +5,10 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-M0 step 4, testkit fixtures: `git mv seed/fixtures/community.json
-catena-testkit/fixtures/community.json` (one commit: verbatim, and JSON needs no staging name),
-then a loader commit: `catena_testkit::fixtures` with `serde`/`serde_json` (enter the testkit's
-dependencies here), a `parse` with a byte ceiling and `deny_unknown_fields`, adversarial
-fixture tests (malformed, unknown field, missing field, negative group, oversized), and a test
-that pins every plan §20 fact about the community graph.
+M0 step 4, last harvest: `git mv seed/tests/visual/svg_renderer.rs
+catena-testkit/src/svg.seed.rs` and `seed/tests/visual/snapshots.rs
+catena-testkit/src/svg_snapshots.seed.rs` (one commit, no content change; ported at M1). Then
+run the M0 gate's `verify:` and close M0.
 
 ## Decisions
 
@@ -110,7 +108,7 @@ that pins every plan §20 fact about the community graph.
 - [x] **Harvest tree_layout + tests** → `catena/src/layout/tree/`, header fixed, unused parameters
   removed. verify: `cargo test -p catena tree && test -z "$(git ls-files seed/graph/tree_layout.rs
   seed/graph/tree_layout_tests.rs)"`
-- [ ] **Testkit fixtures** — `fixtures/community.json` moved verbatim, plus its loader.
+- [x] **Testkit fixtures** — `fixtures/community.json` moved verbatim, plus its loader.
   verify: `cargo test -p catena-testkit && test -z "$(git ls-files seed/fixtures)"`
 - [ ] **Stage the SVG renderer** for its M1 port. verify: `test -f catena-testkit/src/svg.seed.rs
   && test -z "$(git ls-files seed/tests/visual)"`

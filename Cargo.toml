@@ -18,6 +18,8 @@ libm = "0.2"
 # Dev-only. The fork and timeout features would pull rusty-fork and tempfile for nothing.
 proptest = { version = "1.11", default-features = false, features = ["std"] }
 ratatui-core = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 thiserror = "2"
 # Only `width()`; the default `cjk` feature adds ambiguous-width tables catena does not use.
 unicode-width = { version = "0.2", default-features = false }
