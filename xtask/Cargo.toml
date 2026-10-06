@@ -1,0 +1,17 @@
+[package]
+name = "xtask"
+version = "0.0.0"
+description = "Repository tasks for catena: `cargo xtask lint`"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+autotests = false
+autobenches = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = "=1.0.104"
+regex = "=1.13.1"

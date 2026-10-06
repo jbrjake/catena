@@ -5,9 +5,11 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-M0 step 2: add the `xtask` crate (workspace member, `anyhow` + `regex` pinned `=x.y.z`) with
-`cargo xtask lint` implementing every plan §17 rule, each with a planted-violation test in
-`xtask`'s unit tests; then `scripts/smoke.sh`, `scripts/regression.sh` and `.githooks/`.
+M0 step 2, second half: write `scripts/smoke.sh` (commit gate: fmt, `cargo xtask lint`, clippy
+and `--lib` tests scoped to the crates the staged diff touches, quiet on success, loud skips)
+and `scripts/regression.sh` (push gate, plan §17), add `.githooks/pre-commit` and
+`.githooks/pre-push`, note `git config core.hooksPath .githooks` in `CONTRIBUTING.md`, and turn
+the hooks on in this clone.
 
 ## Decisions
 
@@ -72,7 +74,7 @@ M0 step 2: add the `xtask` crate (workspace member, `anyhow` + `regex` pinned `=
   `catena`. verify: `cargo build --workspace --all-targets && cargo test --workspace`
 - [x] **CONTRIBUTING.md** — DCO sign-off plus the contributor license grant to `jbrjake` (plan
   §3). verify: `grep -q Signed-off-by CONTRIBUTING.md && grep -qi "license grant" CONTRIBUTING.md`
-- [ ] **`cargo xtask lint`** — every §17 rule, each with a planted-violation test.
+- [x] **`cargo xtask lint`** — every §17 rule, each with a planted-violation test.
   verify: `cargo test -p xtask && cargo xtask lint`
 - [ ] **Gates and hooks** — `scripts/smoke.sh`, `scripts/regression.sh`, `.githooks/`; the
   `core.hooksPath` setup noted in `CONTRIBUTING.md`. verify: `./scripts/regression.sh`

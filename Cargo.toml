@@ -1,5 +1,5 @@
 [workspace]
-members = ["catena", "catena-ratatui", "catena-testkit"]
+members = ["catena", "catena-ratatui", "catena-testkit", "xtask"]
 exclude = ["fuzz"]
 resolver = "3"
 
