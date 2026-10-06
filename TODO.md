@@ -454,8 +454,8 @@ Each `verify:` lists the named tests first, because a test filter that matches n
   in the default key table. verify: `cargo test --workspace &&
   cargo build -p catena-ratatui --bin catena-demo --features demo && cargo +nightly fuzz run
   fuzz_events -- -runs=10000`
-- [ ] **M4 — Layered engine** — per plan §19. verify: `cargo test -p catena layered:: tree::`
-  exits 0, goldens exist for the 12-fixture set, edge conservation passes at 512 cases
+- [ ] **M4 — Layered engine** — per plan §19 (its two test filters moved after `--`, as M1's
+  were). verify: `cargo test -p catena -- layered:: tree::` exits 0, goldens exist for the 12-fixture set, edge conservation passes at 512 cases
 - [ ] **M5 — Polish + package** — per plan §19, including `seed/` removed and `HARVEST_COMPLETE`
   flipped in `xtask`, and A4's goldens once the radial view renders. verify: `cargo test --workspace --all-features && cargo publish --dry-run
   -p catena -p catena-ratatui -p catena-testkit && test ! -e seed && test -z "$(git ls-files
