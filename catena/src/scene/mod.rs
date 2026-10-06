@@ -3,10 +3,14 @@
 //! drawn has bounds and a payload.
 
 mod graph;
+mod orthogonal;
+mod render;
 mod routes;
 
 pub use graph::{
     CountBadge, Decoration, EDGE_HIT_CELLS, EdgeRoute, Layer, Payload, Route, SceneGraph,
     SceneItem, SegmentId, StyleId,
 };
+pub use orthogonal::BoxGlyphs;
+pub use render::{Compositor, RenderOptions};
 pub use routes::{EdgeEnds, RouteFault, route_faults};

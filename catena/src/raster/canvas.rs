@@ -181,14 +181,52 @@ impl SubCellCanvas {
         surface: &mut S,
         style: impl Fn(ColorSlot) -> CellStyle,
     ) {
+        self.blit_masked(surface, style, &[]);
+    }
+
+    /// [`SubCellCanvas::blit`], except that a cell whose entry in `masked` (row-major, one per
+    /// cell) is `true` is not written: the label mask, so edges never overprint text (plan
+    /// §7.3). Cells past the end of `masked` are unmasked.
+    pub fn blit_masked<S: Surface + ?Sized>(
+        &self,
+        surface: &mut S,
+        style: impl Fn(ColorSlot) -> CellStyle,
+        masked: &[bool],
+    ) {
         let cols = u16::try_from(self.cell_width).unwrap_or(u16::MAX);
         blit::blit(
             self.blitter,
             &self.lines,
-            (cols, &self.buffer, &self.slots),
+            (cols, &self.buffer, &self.slots, masked),
             surface,
             style,
         );
+    }
+
+    /// ORs `upper`'s lit sub-pixels into this canvas, each cell (each half, for half blocks)
+    /// that `upper` lights taking `upper`'s color slot: the compositor's merge of one layer over
+    /// the layers below, under which a lower layer's dots survive a crossing (plan §7.4, ledger
+    /// row 15). A canvas of another blitter or size merges nothing.
+    pub fn merge_from(&mut self, upper: &SubCellCanvas) {
+        let same_shape = upper.blitter == self.blitter
+            && upper.cell_width == self.cell_width
+            && upper.cell_height == self.cell_height;
+        if !same_shape {
+            return;
+        }
+        let per_cell = self.blitter.color_slots();
+        for (cell, &bits) in upper.buffer.iter().enumerate() {
+            if bits == 0 {
+                continue;
+            }
+            self.buffer[cell] |= bits;
+            for half in 0..per_cell {
+                let lit = per_cell == 1 || bits & (1 << half) != 0;
+                if lit {
+                    self.slots[cell * per_cell + half] = upper.slots[cell * per_cell + half];
+                }
+            }
+        }
     }
 
     /// The walk of `points`, clipped to this canvas: what lies far off it is skipped, not

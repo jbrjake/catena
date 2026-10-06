@@ -323,6 +323,62 @@ fn an_ascii_circle_draws_its_tangents() {
 }
 
 #[test]
+fn merging_keeps_the_lower_dots_and_takes_the_upper_color() {
+    // The seed's paint-behind blit dropped the lower layer's dots where an overlay edge crossed
+    // (plan §14 row 15); the merge ORs them.
+    let mut under = SubCellCanvas::new(Blitter::Braille, 3, 1);
+    under.set_pen(ColorSlot(1));
+    under.draw_line(0, 0, 5, 0);
+    let mut over = SubCellCanvas::new(Blitter::Braille, 3, 1);
+    over.set_pen(ColorSlot(2));
+    over.draw_line(2, 3, 3, 3);
+    under.merge_from(&over);
+    assert_eq!(under.get_cell(0, 1), 0x09 | 0xC0, "both layers' dots");
+    let grid = blitted(&under);
+    assert_eq!(at(&grid, 0, 0), ("⠉", Some(RED), None));
+    assert_eq!(
+        at(&grid, 1, 0),
+        ("⣉", Some(BLUE), None),
+        "the upper layer colors the cell"
+    );
+}
+
+#[test]
+fn half_blocks_merge_each_half_on_its_own() {
+    let mut under = SubCellCanvas::new(Blitter::HalfBlock, 1, 1);
+    under.set_pen(ColorSlot(1));
+    under.set_pixel(0, 0);
+    under.set_pixel(0, 1);
+    let mut over = SubCellCanvas::new(Blitter::HalfBlock, 1, 1);
+    over.set_pen(ColorSlot(2));
+    over.set_pixel(0, 1);
+    under.merge_from(&over);
+    assert_eq!(at(&blitted(&under), 0, 0), ("▀", Some(RED), Some(BLUE)));
+}
+
+#[test]
+fn a_canvas_of_another_shape_does_not_merge() {
+    let mut braille = SubCellCanvas::new(Blitter::Braille, 2, 1);
+    let mut sextant = SubCellCanvas::new(Blitter::Sextant, 2, 1);
+    sextant.set_pixel(0, 0);
+    braille.merge_from(&sextant);
+    let mut wider = SubCellCanvas::new(Blitter::Braille, 3, 1);
+    wider.set_pixel(0, 0);
+    braille.merge_from(&wider);
+    assert_eq!(braille.render(), [['\u{2800}'; 2]]);
+}
+
+#[test]
+fn a_masked_cell_is_not_written() {
+    let mut canvas = SubCellCanvas::new(Blitter::Ascii, 4, 1);
+    canvas.draw_line(0, 0, 3, 0);
+    let mut grid = CellGrid::new(4, 1);
+    grid.put(1, 0, "L", CellStyle::new(BLUE));
+    canvas.blit_masked(&mut grid, palette, &[false, true, true, false]);
+    assert_eq!(grid.to_string(), "─L ─");
+}
+
+#[test]
 fn a_canvas_request_past_the_cell_ceiling_is_bounded() {
     let mut canvas = SubCellCanvas::new(Blitter::Braille, u16::MAX, u16::MAX);
     assert_eq!(

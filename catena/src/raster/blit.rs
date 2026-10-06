@@ -231,7 +231,7 @@ fn ascii_glyph(mask: u8, lines: &LineGlyphs) -> char {
 pub(crate) fn blit<S: Surface + ?Sized>(
     blitter: Blitter,
     lines: &LineGlyphs,
-    (cols, masks, slots): (u16, &[u8], &[ColorSlot]),
+    (cols, masks, slots, masked): (u16, &[u8], &[ColorSlot], &[bool]),
     surface: &mut S,
     style: impl Fn(ColorSlot) -> CellStyle,
 ) {
@@ -240,7 +240,7 @@ pub(crate) fn blit<S: Surface + ?Sized>(
     }
     let per_cell = blitter.color_slots();
     for (i, &mask) in masks.iter().enumerate() {
-        if mask == 0 {
+        if mask == 0 || masked.get(i).copied().unwrap_or(false) {
             continue;
         }
         let (Ok(x), Ok(y)) = (

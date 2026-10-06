@@ -13,8 +13,8 @@ green on its own:
    `EdgeRoute`, shared segments, `CountBadge`, `edges_at` and `route_faults`.
 2. ~~Clipping~~ (done): the canvas clips every walk exactly, which closed "Bound the work of a
    huge segment".
-3. The compositor: one canvas per layer, OR-merged with the topmost layer's color; `Orthogonal`
-   routes drawn as box-drawing glyphs with junctions; the label mask; glow via `patch_bg`.
+3. ~~The compositor~~ (done): `scene::Compositor` with per-layer OR-merge, `Orthogonal` arms,
+   the label mask, glow, node text and badges; A3 closed.
 4. `insta` and the first T2 goldens of primitive scenes (Ascii blitter), plus T3 scene
    snapshots; then the M1 milestone `verify:`.
 
@@ -133,6 +133,19 @@ block the work.
   pixels off the canvas can shift its phase once, when that start crosses the slack. Axis-aligned
   integer patterns do not drift, so they match exactly at any distance (a test covers 10 000
   pixels).
+- **M1: the compositor merges every layer's polylines into one canvas and blits it once,**
+  before glow and text. Plan §7.4 has a canvas per layer, OR-merged with the topmost layer's
+  color; drawing that merged canvas once, under the text layers, keeps one blit per frame, and the
+  label mask (node boxes and badge cells) keeps any polyline off text whatever its layer.
+  `Orthogonal` routes draw after the canvas, as a per-cell arm mask (N, E, S, W) ORed across every
+  route, so runs that meet form the corner, tee or cross they make; the last route through a cell
+  styles it, a cell with one arm draws the full line, and a step on neither row nor column bends
+  horizontal first. `BoxGlyphs::BOX` and `::ASCII` stand in for §12's `GlyphSet`. A node box draws
+  its label from the `labels` callback on its first row, clipped to its bounds and the surface
+  (a wide glyph cut by either is dropped), until node forms arrive with `ResolvedMetrics` (M2). A
+  badge draws `×n` at its cell after its item, clipped to the item's bounds. A glow patches its
+  bounds' backgrounds with the style's background (its foreground if it has none), after edges so
+  edge glyphs keep theirs.
 - **M1: the sextant table is checked against Unicode's character names,** a 60-entry table
   generated from the Unicode 15.1 database (`BLOCK SEXTANT-<cells>`), not against the encoder's
   own arithmetic; `▌`, `▐`, `█` and a space fill the four patterns Unicode encodes elsewhere.
@@ -353,7 +366,7 @@ Each `verify:` lists the named tests first, because a test filter that matches n
   limit tests green; the C⁰ test replaced, not deleted. verify: `cargo test -p catena -- --list |
   grep -c 'inter_group_chain_is_g1_at_the_junction\|beta_zero_chain_is_collinear' | grep -qx 2
   && cargo test -p catena -- chord`
-- [ ] **A3 — room in the scene for shared geometry (M1)** — `Payload` is `#[non_exhaustive]`;
+- [x] **A3 — room in the scene for shared geometry (M1)** — `Payload` is `#[non_exhaustive]`;
   each edge has a route, either one `EdgePath` or an ordered chain of segment ids; a segment
   carries its member `EdgeIx` set and hit-testing it returns that set; invariant B in route
   terms (every input edge maps to exactly one route, and that route's segments connect its
