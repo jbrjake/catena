@@ -1,0 +1,85 @@
+# CI (plan §17). Every `uses:` is pinned by full commit SHA; the comment names the release.
+# Later milestones add coverage and bench (M2), fuzz (M3) and pty (M5).
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The push gate on all three OSes: committed goldens must hash the same everywhere (§11.5).
+  check:
+    name: check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: regression gate
+        shell: bash
+        run: bash scripts/regression.sh
+
+  # The published crates build on their declared rust-version. `cargo msrv verify` cannot read
+  # an inherited rust-version from the virtual workspace root, so it runs per crate.
+  msrv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
+        with:
+          toolchain: stable
+      - uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
+        with:
+          tool: cargo-msrv
+      - name: verify rust-version per published crate
+        shell: bash
+        run: |
+          for crate in catena catena-ratatui catena-testkit; do
+            cargo msrv verify --manifest-path "$crate/Cargo.toml"
+          done
+
+  # DCO plus the contributor license grant (CONTRIBUTING.md): every commit of a pull request
+  # from a fork must carry a Signed-off-by trailer. Same-repository branches are the owner's
+  # own, so there a missing trailer is reported as a warning only.
+  dco:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: every commit carries Signed-off-by
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          FROM_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          level=warning
+          if [ "$FROM_FORK" = "true" ]; then level=error; fi
+          missing=0
+          for commit in $(git rev-list --no-merges "$BASE_SHA..$HEAD_SHA"); do
+            if ! git log -1 --format=%B "$commit" | grep -qE '^Signed-off-by: .+ <[^>]+>$'; then
+              echo "::$level::commit $commit has no Signed-off-by trailer (see CONTRIBUTING.md)"
+              missing=$((missing + 1))
+            fi
+          done
+          echo "$missing commit(s) without sign-off; pull request from a fork: $FROM_FORK"
+          if [ "$level" = "error" ] && [ "$missing" -gt 0 ]; then exit 1; fi

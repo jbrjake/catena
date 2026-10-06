@@ -5,10 +5,12 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-M0 step 3: write `.github/workflows/ci.yml` with `check` (ubuntu/macos/windows × stable,
-`shell: bash`, runs `scripts/regression.sh`), `msrv` (`cargo msrv verify --manifest-path` per
-published crate; a root-level `verify` cannot read an inherited `rust-version`) and `dco`. Pin
-every `uses:` by full commit SHA. Then push the branch and watch the run.
+M0 step 4, first harvest: `git mv seed/graph/braille.rs` and `seed/graph/braille_tests.rs` to
+`catena/src/raster/braille.seed.rs` and `braille_tests.seed.rs` (commit 1, no content change),
+then port them (commit 2): declare `raster`, make `get_cell` clip and add `try_get_cell`, fold
+the four Bézier loops into one sampler, and move the assert quartet to
+`catena-testkit/src/braille_asserts.rs` with the tests that use it in
+`catena/tests/catena/raster.rs`. Also confirm the first CI run on this branch is green.
 
 ## Decisions
 
