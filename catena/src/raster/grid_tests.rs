@@ -348,6 +348,25 @@ fn a_zero_sized_grid_takes_no_writes() {
 }
 
 #[test]
+fn rows_yield_every_row_left_to_right() {
+    let mut grid = CellGrid::new(3, 2);
+    grid.put(0, 0, "a", style(RED));
+    grid.put(1, 1, "日", style(RED));
+    let rows: Vec<Vec<&str>> = grid
+        .rows()
+        .map(|row| row.iter().map(Cell::symbol).collect())
+        .collect();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows, [vec!["a", " ", " "], vec![" ", "日", ""]]);
+    assert_eq!(
+        CellGrid::new(0, 3).rows().len(),
+        3,
+        "a zero-width grid still has its rows"
+    );
+    assert!(CellGrid::new(0, 3).rows().all(<[Cell]>::is_empty));
+}
+
+#[test]
 fn clear_and_resize_leave_a_blank_grid() {
     let mut grid = CellGrid::new(2, 2);
     grid.put(0, 0, "日", style(RED));

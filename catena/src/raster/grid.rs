@@ -203,6 +203,11 @@ impl CellGrid {
         self.index(x, y).map(|i| &self.cells[i])
     }
 
+    /// The rows, top to bottom, each its cells left to right.
+    pub fn rows(&self) -> impl ExactSizeIterator<Item = &[Cell]> {
+        (0..self.height).map(|y| self.row(y))
+    }
+
     /// The grid as text with SGR escapes: one line per row, a sequence wherever the colors or
     /// attributes change, a reset at the end of any row left styled, and trailing cells that
     /// show nothing (a space with no background) trimmed.
