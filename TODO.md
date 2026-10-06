@@ -8,7 +8,8 @@ to exit 0. Milestones and their gates come from plan §19.
 **M2 (graph model + force layout + viewport, plan §19) is under way: steps 1 to 4, the graph
 store, `ResolvedMetrics`, the force layout with the relayout rework the owner ruled on, and
 the snapper and viewport, are done (`## M2` below), so `update` now lays out and snaps. Next is
-step 5: draw it, layout → `SceneGraph` → `render_to_string`.**
+the owner's joined-islands rework ("Pull joined islands together" under `## M2`), then step 5:
+draw it, layout → `SceneGraph` → `render_to_string`.**
 
 What step 5 inherits: `GraphView::cell(ix)` is where a node's anchor is drawn and
 `Viewport::boxes` every node's drawn box (both waiting on the scene, `expect(dead_code)`);
@@ -17,7 +18,9 @@ the size changed, since until the first render a view lays out for 80 × 24. Inv
 measured on world positions at the later layout's `Fit::Contain` scale; with the snapper live,
 read it again on drawn cells, since a refit after a node lands outside the old bounding box
 moves every cell (anchor compensation, plan §6, holds only the focused node, and there is none
-until M3's controller). Unratified choices are flagged under `## Decisions` for the owner.
+until M3's controller). The owner ruled on M2's open choices (`owner-rulings.md`, "Relayout
+follow-ups"): F stays pooled with no per-run floor, joined islands must pull together, and the
+rest stands except fitting islands to the frame, which is still the owner's open question.
 
 M2 in this order, each step green on its own:
 
@@ -98,7 +101,8 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
   boxes 20 columns apart at zoom 1 overlap at 0.5. On a zoom below `ref_zoom` the drawn cells
   are resolved again; if nothing has to move nothing changes, so this moves no more than plan
   §11.2 allows ("only nodes that would otherwise overlap"). It costs one resolve per zoom-out
-  frame, O(n × box cells). Unratified, since it departs from plan §6's wording.
+  frame, O(n × box cells). It departs from plan §6's wording; the owner ratified it ("fine
+  with the rest", "Relayout follow-ups").
 - **M2 step 3: `layout_fr.rs` splits three ways.** Its FR core is ported in
   `layout/force/simulation.rs`, a rewrite of the loop, so `git show -M20%` pairs the staged seed
   with `ring.seed.rs`, its largest verbatim slice, and shows the simulation as new.
@@ -172,9 +176,11 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
   neighbors where they end over the force had they stayed put: 0.04 to 0.1 over the suite,
   and 0.06 in the reassessment test, where the step 3 stopgap left 0.81. A resize scales the old layout about its centroid by the ratio of base
   distances (the equilibrium when every force scales with distance), then relaxes it cold with
-  every node free, no tether, islands packed again and the ring placed again. Unratified: the
-  reach and tether values, and that a merged island's far side holds (two islands a new node
-  joins stay apart, on a stretched edge, rather than being drawn together).
+  every node free, no tether, islands packed again and the ring placed again. The owner
+  ratified the reach and tether values and overruled a merged island's far side holding: "it's
+  not okay for islands to be stretched, they need to pull together." Two islands a new node
+  joins must be drawn together rather than left apart on a stretched edge; the rework is
+  "Pull joined islands together" under `## M2`.
 - **M2: the simulation steps by damped Jacobi under an adaptive temperature,** departing from
   plan §8.1's kept "displacement `min(‖F‖, T)`" and multiplicative cooling. The seed's
   schedule (span / 2, × 0.95 a step) drops below `converge_eps` near step 94, so a cold run
@@ -190,7 +196,8 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
   cooling` after five in a row that lowered it. Defaults unchanged. Cost, release on this
   container, median of 7 × 12 seeds, against the stopgap in one sitting: cold 200 nodes /
   ~320 edges 9.9 ms (was 7.7), warm 3.1 ms (was 5.3; holds skip most of the work), cold 1,000
-  / ~1,650 105 ms (was 82): within §15.1's 50, 10 and 400 ms. Unratified.
+  / ~1,650 105 ms (was 82): within §15.1's 50, 10 and 400 ms. Ratified by the owner ("fine
+  with the rest").
 - **M2: each node has its own ideal distance,** `kᵢ = √(area / core size) × max(widthᵢ / 4,
   1)` with `k_label_scale` on, and a pair rests at `√(kᵢ kⱼ)`. Plan §8.1 scales one `k` by the
   average label width, so a level change that widens some boxes would rescale every distance;
@@ -198,13 +205,13 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
   out by 36 world units for a box 31 columns wider), and nodes past the reach hold. The base
   is recomputed every run, so a topology change that grows the core shrinks every ideal
   distance slightly; held nodes keep the old scale until a resize or a change reaches them.
-  Unratified.
+  Ratified by the owner ("fine with the rest").
 - **M2: invariant F is read over the suite, not run by run.** Plan §11.3 states it as
   statistical over a seeded fixture suite; step 3 had asserted it per run, which only frozen
   survivors could meet. With reassessment, a run whose new nodes neighbor many survivors keeps
   less (the worst of 24 keeps 79%), so the test pools all 24 runs' survivors: 1890 of 2053,
-  92.1%, against 90%. The threshold is unchanged. Unratified: the owner may want a per-run
-  floor as well.
+  92.1%, against 90%. The threshold is unchanged. Ratified, and the owner ruled out a
+  per-run floor: "no per-run floor."
 - **M2 step 3: the generated families (plan §20) are `fixtures::generated(seed, n)`.** One
   `SplitMix64` stream (checked against Vigna's reference outputs) draws, in order: each node's
   group (one in twenty ungrouped, the rest in contiguous groups of about 12), label (one to
@@ -684,6 +691,19 @@ Plan §19, in the six steps of `## Now`, each green on its own. The milestone cl
   'invariant_a_no_two_boxes_intersect\|invariant_g_a_relayout_keeps_the_focused_node_where_it_is_drawn\|invariant_i_derived_at_the_snap_zoom_with_no_pan_is_canonical\|an_edit_that_pushes_more_than_eight_nodes_aside_relays_out\|crossing_a_semantic_level_relays_out_around_the_reshaped_nodes\|a_crowding_zoom_out_moves_only_the_nodes_that_meet'
   | grep -qx 6 && cargo test -p catena -- geometry:: view:: && test -z "$(git ls-files
   catena/src/geometry/snap.seed.rs catena/src/geometry/snap_tests.seed.rs)"`
+- [ ] **Pull joined islands together** (`owner-rulings.md`, "Relayout follow-ups") — when a
+  commit's new node or edge joins two islands, the reach-and-tether relayout holds each
+  island's far side, so the islands stay apart and the joining edges stretch. The owner: "it's
+  not okay for islands to be stretched, they need to pull together." The islands a change joins
+  must close toward each other until the joining edges rest near their ideal length
+  `√(kᵢ kⱼ)`. Known tension: an earlier measurement found that letting merged islands slide as
+  rigid bodies lowered F, which stays pooled at 90% with no per-run floor; if the rework cannot
+  hold both, the threshold is not lowered and the conflict goes back to the owner. Lands before
+  step 5. The test's 1.5× bound is a derived threshold, unratified. verify: `cargo test -p
+  catena -- --list | grep -c 'a_node_joining_two_islands_pulls_them_together' | grep -qx 1 &&
+  cargo test -p catena -- layout::force` (the named test: a new node bridging two islands of a
+  generated family; every layout edge of the bridge ends within 1.5× its rest length, and the
+  islands' nearest boxes end closer than before the commit)
 
 ## Course correction (owner rulings A1–A4)
 

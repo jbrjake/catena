@@ -113,3 +113,34 @@ run freezes before equilibrium) and to the stopgap that held F by letting surviv
 It also rules out M2 step 3's stopgap (survivors annealing from `converge_eps` in every warm
 run): a topology change must let the older nodes it affects move as the forces say. Slower
 cooling is acceptable only within the performance budgets of plan §15.1.
+
+## Relayout follow-ups: F stays pooled, joined islands pull together
+
+Given in answer to the six open choices reported after M2 step 4 (`56c54e3`): whether invariant
+F also needs a per-run floor; the reach-and-tether trade-off, under which "when a new node joins
+two islands, their far sides stay put and the joining edge stretches, rather than the islands
+being pulled together"; the damped step and the per-node ideal distance; the zoom-out re-snap
+triggering on actual overlap; resize not yet using the frame's shape (filed with options); and
+the 80 × 24 layout before the first render.
+
+> record these but don't start new work. no per-run floor. it's not okay for islands to be
+> stretched, they need to pull together. fine with the rest.
+
+| Choice | Ruling |
+|---|---|
+| Invariant F, pooled over the seeded suite | Stands, with no per-run floor; the 90% threshold is unchanged |
+| A new node joining two islands holds their far sides, so the joining edge stretches | Overruled: islands a change joins are drawn together, and no joining edge is left stretched |
+| The reach (2 hops) and tethers (0.1 near, ramping to 30) | Stand for everything the joined-islands rule does not change |
+| The damped Jacobi step under Hu's adaptive temperature | Stands |
+| A per-node ideal distance `kᵢ` | Stands |
+| The zoom-out re-snap triggering on boxes that actually meet | Stands |
+| Laying out for 80 × 24 until the first render | Stands |
+| Fitting islands and the ring to the frame's shape (plan §8.2) | Still open: accepted as a filed question; no option is chosen |
+
+### Where these override the plan
+
+| Plan text | Overridden by |
+|---|---|
+| §8.1 kept mechanics: displacement `min(‖F‖, T)` and multiplicative cooling | A damped step, `F / max(D, 1)` capped by the temperature, with Hu's adaptive temperature |
+| §8.1: one `k` scaled by the average label width | Each node's own `kᵢ`; a pair rests at `√(kᵢ kⱼ)` |
+| §6: re-snap "on a zoom-out frame where the last snap displaced anything" | Re-snap on any zoom-out frame where drawn boxes meet; still moves only those nodes |
