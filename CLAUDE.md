@@ -38,6 +38,9 @@ one CI's `check` runs (owner ruling); a container's `stable` can lag, so check `
 - `docs/design/initial-catena-plan.md` is the design authority. Its §21 is ruled, so departing
   from it is a question for the owner. `docs/design/owner-rulings.md` amends it without editing
   it, and wins where they conflict.
+- Work lands on `main`: every push of a session branch is followed by fast-forwarding `main` to
+  it and pushing `main`, and a merged branch is deleted, because the owner rules: "i never want
+  you to leave work on your random branches."
 - `seed/` is harvest input: never compiled, never edited in place. A file leaves by `git mv` to
   `<target>.seed.rs`, then a separate port commit (plan §18), because the port diff is the record
   of what changed.

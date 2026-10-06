@@ -8,6 +8,17 @@ records, under `## Decisions`, every choice a ruling leaves open.
 
 > just update to rust 1.99 so you match latest stable so you don't have conflicts with gh ci.
 
+## Where work lands
+
+> dude that's the work you did this session. you need to merge it onto main. i never want you to
+> leave work on your random branches.
+
+A session still develops on the branch its harness names, but that branch is a transit lane, not
+a home: after every push of it, `main` is fast-forwarded to it and pushed, and once merged the
+branch is deleted. If `main` has moved so that a fast-forward is impossible, the branch is rebased
+onto `main` (it is the session's own branch) and the gate re-run before `main` moves. The plan
+says nothing about branches, so this overrides no plan text.
+
 ## Course correction: four ideas lifted from a bundling design
 
 > This message is the ruling. Don't edit docs/design/initial-catena-plan.md. Where this message
