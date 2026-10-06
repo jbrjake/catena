@@ -36,11 +36,13 @@ M0 creates these. Until they exist, plan §19 M0 is the procedure.
 
 - `docs/design/initial-catena-plan.md` is the design authority. Its §21 is ruled, so departing
   from it is a question for the owner.
-- `seed/` is harvest input: never compiled, never edited in place. A file leaves by `git mv`,
-  then a separate port commit (plan §18), because the port diff is the record of what changed.
+- `seed/` is harvest input: never compiled, never edited in place. A file leaves by `git mv` to
+  `<target>.seed.rs`, then a separate port commit (plan §18), because the port diff is the record
+  of what changed.
 - `catena` never names a ratatui type, so the core works without a terminal.
-- Time enters only through `tick(dt)` and randomness only through a seeded SplitMix64, because
-  determinism is a published guarantee (plan §11).
+- Time enters only through `tick(dt)`, the core draws no random numbers (the testkit's generators
+  use a seeded SplitMix64), and transcendental math goes through `fmath`, because determinism
+  across runs and platforms is a published guarantee (plan §11).
 - Outside PRs merge only with DCO sign-off and the contributor license grant, because one
   ungranted merge ends the commercial-exception arm.
 - `cargo publish` runs only with `--dry-run`. Releases are the owner's act.
