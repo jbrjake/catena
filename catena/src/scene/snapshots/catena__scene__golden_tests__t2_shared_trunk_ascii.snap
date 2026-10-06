@@ -1,0 +1,13 @@
+---
+source: catena/src/scene/golden_tests.rs
+expression: "render(&scene, (40, 9), blitter)"
+---
+ada                           lovelace
+   ╲╲                         ╱╱╱
+     ╲╲                    ╱╱╱
+       ╲╲               ╱╱╱
+         ╲┼───────────┼╳
+        ╱╱              ╲╲╲
+      ╱╱                   ╲╲╲╲
+    ╱╱                         ╲╲╲
+babbage                         日本語

@@ -1,0 +1,13 @@
+---
+source: catena/src/scene/golden_tests.rs
+expression: "render(&scene, (28, 9), blitter)"
+---
+          root
+            │
+            │
+            │
+ ada─────────┼──────lovelace
+             │
+            ×4
+             │
+           leaf

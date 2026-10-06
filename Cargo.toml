@@ -14,6 +14,9 @@ catena = { path = "catena", version = "0.1.0" }
 # Path only, no version: cargo strips it from `catena`'s published dev-dependencies, which is
 # what lets `catena` publish before the testkit that depends on it (plan §3).
 catena-testkit = { path = "catena-testkit" }
+# Dev-only: T2 golden text snapshots (plan §16.3). No `filters` feature, because a deterministic
+# frame needs no redaction, and no `colors`, which only tints the diff.
+insta = { version = "1.49", default-features = false }
 libm = "0.2"
 # Dev-only. The fork and timeout features would pull rusty-fork and tempfile for nothing.
 proptest = { version = "1.11", default-features = false, features = ["std"] }

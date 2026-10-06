@@ -14,3 +14,6 @@ pub use graph::{
 pub use orthogonal::BoxGlyphs;
 pub use render::{Compositor, RenderOptions};
 pub use routes::{EdgeEnds, RouteFault, route_faults};
+
+#[cfg(test)]
+mod golden_tests;

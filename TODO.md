@@ -5,21 +5,28 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**M1 (raster + scene, plan §19), step 4 of 4: the scene.** Steps 1–3 are done (`Surface` and
-`CellGrid`; T3 live; `SubCellCanvas` and the four blitters). Step 4 lands in this order, each
-green on its own:
+**M1 is closed; M2 (graph model + force layout + viewport, plan §19) is next.** M2 in this
+order, each step green on its own:
 
-1. ~~Scene types~~ (done): `SceneGraph`, `SceneItem`, `Layer`, `Payload`, both `Route` kinds,
-   `EdgeRoute`, shared segments, `CountBadge`, `edges_at` and `route_faults`.
-2. ~~Clipping~~ (done): the canvas clips every walk exactly, which closed "Bound the work of a
-   huge segment".
-3. ~~The compositor~~ (done): `scene::Compositor` with per-layer OR-merge, `Orthogonal` arms,
-   the label mask, glow, node text and badges; A3 closed.
-4. `insta` and the first T2 goldens of primitive scenes (Ascii blitter), plus T3 scene
-   snapshots; then the M1 milestone `verify:`.
+1. The graph store (plan §4): `GraphView<K>`, `Tx` (all-or-nothing `update`), `GraphError`,
+   `EdgeId`, the key-interning table filling `graph::NodeIx`/`EdgeIx`, incident lists, parallel-
+   edge rank, delta classification (`Topology > Geometry > Property`).
+2. `ResolvedMetrics` (plan §5): one private measuring function over `text_cells`, the semantic
+   zoom table (`geometry::zoom`, live at last), decorations inside the box, `max_label_cols`;
+   node boxes and the `Label` payload drawn from it (`NodeShape::Box` takes its border from
+   `seed/ui/box_layout.rs`'s `render_box`, which is then deleted).
+3. Harvest `seed/graph/layout_fr.rs` and its tests by the §18 two-commit procedure into
+   `layout/force/` (`ForceLayout`, both repulsion modes, honored `iterations`, no placement-time
+   aspect squash, `fmath` throughout), with invariants F and M.
+4. `GridSnapper` and the viewport (plan §6): isotropic `Fit::Contain`, `cell_aspect` once, the
+   50-ring spiral, the enforced 2-row gap, canonical/derived split, zoom-out re-snap, anchor
+   compensation; invariants A, G and I.
+5. Layout → `SceneGraph` → `render_to_string`; T3 scene snapshots; the T4 tier with the
+   `catena-render-hash` bin and committed hashes; invariants B–E and N on real scenes.
+6. The zero-allocation frame test, the first criterion bench, `scripts/check-perf.sh` with
+   `bench-baseline.json`, and the `coverage` and `bench` CI jobs.
 
-The owner's crates.io name reservation is recommended before M1 lands (plan §0); it does not
-block the work.
+The owner's crates.io name reservation is still recommended (plan §0); it blocks nothing.
 
 ## Decisions
 
@@ -146,6 +153,15 @@ block the work.
   badge draws `×n` at its cell after its item, clipped to the item's bounds. A glow patches its
   bounds' backgrounds with the style's background (its foreground if it has none), after edges so
   edge glyphs keep theirs.
+- **M1: T2 goldens are `insta` snapshots in `catena`'s unit tests** (`src/scene/snapshots/`),
+  because scenes are built from crate-private indices until `GraphView` exists. `insta` enters
+  with no default features and without `filters` (a deterministic frame needs no redaction, plan
+  §16.3; the dependency policy's "with `filters`" is the opposite of that rule, so it is not
+  taken). A missing or changed golden fails, locally and in CI; `cargo insta review` accepts.
+  The first set renders four primitive scenes (a triangle with a curved edge in all four
+  blitters, orthogonal tree connectors with tees and a cross, crossing layers under node text
+  with a badge, a shared trunk) at one size each; the §20 fixture goldens at two viewport sizes
+  come with the layouts.
 - **M1: the sextant table is checked against Unicode's character names,** a 60-entry table
   generated from the Unicode 15.1 database (`BLOCK SEXTANT-<cells>`), not against the encoder's
   own arithmetic; `▌`, `▐`, `█` and a space fill the four patterns Unicode encodes elsewhere.
@@ -233,8 +249,10 @@ block the work.
 - **`word_wrap` leaves by copy, not `git mv`.** The rest of `seed/ui/box_layout.rs` and its tests
   stay as the box-drawing reference for M1 (plan §18 "reference for box drawing only"), and
   §19's M0 `verify:` does not list them. The copy is staged as `text.seed.rs` and ported in the
-  next commit, so the port diff is still the record; the seed file is deleted with the M1 port
-  it informs.
+  next commit, so the port diff is still the record. The seed file is deleted with the port it
+  informs: M1's orthogonal routes needed none of it (their glyphs come from an arm table), so
+  that is M2's bordered node box (`render_box`'s single and double borders, for
+  `NodeShape::Box`).
 - **`word_wrap` semantics beyond plan §18.** Paragraphs split as `str::lines` does (a trailing
   `\n` adds no line; `\r\n` counts as one break); an empty paragraph yields one empty line; a
   character wider than `width` (double-width at width 1) is dropped, because "every output line
@@ -334,17 +352,19 @@ Plan §19, in four steps, each green on its own. The milestone closes on its own
   ascii encoders. verify: `cargo test -p catena -- --list | grep -c
   'braille_glyphs_are_the_dot_pattern_offset_from_u2800\|half_blocks_carry_a_color_per_half\|sextant_glyphs_follow_their_unicode_names\|ascii_lines_draw_as_direction_glyphs_with_a_junction_where_they_cross'
   | grep -qx 4 && cargo test -p catena raster::`
-- [ ] **Step 4: the scene** — `SceneGraph`, `SceneItem`, `Layer`, `Payload` (A3), both `Route`
+- [x] **Step 4: the scene** — `SceneGraph`, `SceneItem`, `Layer`, `Payload` (A3), both `Route`
   kinds, per-edge routes and shared segments (A3), `CountBadge` (A3), the compositor's OR-merge,
-  the label mask, Cohen–Sutherland clipping; `insta` and the first T2 goldens.
+  the label mask, clipping (exact, in the walk); `insta` and the first T2 goldens.
   verify: `cargo test -p catena scene:: && cargo insta test --check`
-- [ ] **M1 — Raster + scene** — `Surface`, `CellGrid`, `SubCellCanvas`, four blitters,
+- [x] **M1 — Raster + scene** — `Surface`, `CellGrid`, `SubCellCanvas`, four blitters,
   compositor with OR-merge, label mask, clipping, `SceneGraph` with both `Route` kinds, the
   §7.1 text-cell rule, the SVG renderer ported onto `CellGrid`; T2 goldens, T3 live; A3's
   shared-geometry room in the scene.
-  verify: `cargo test -p catena raster:: scene:: && cargo insta test && test ! -e
-  catena-testkit/src/svg.seed.rs` (plus a committed `.hash` set and a test that perturbs one
-  color and watches T3 fail)
+  verify: `cargo test -p catena -- raster:: scene:: && cargo insta test && test ! -e
+  catena-testkit/src/svg.seed.rs && test -n "$(git ls-files '*.hash')" && cargo test -p
+  catena-testkit perturbing_one_color_fails_the_committed_snapshot` (plan §19 writes the first
+  command as `cargo test -p catena raster:: scene::`, which cargo rejects: two filters go after
+  `--`)
 
 ## Course correction (owner rulings A1–A4)
 

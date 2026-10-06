@@ -1,0 +1,15 @@
+---
+source: catena/src/scene/golden_tests.rs
+expression: "render(&scene, (34, 12), blitter)"
+---
+
+  ada⠤⢄⣀⣀⣀⣀⣀
+    ⠱⡀      ⠉⠉⠉⠉⠉⠑⠒⠒⠒⠒babbage
+     ⠱⡀                ⡠⠊   ⠉⢢
+      ⠘⡄             ⢀⠎       ⢣
+       ⠘⢄          ⢀⠔⠁         ⡇
+        ⠈⢆       ⢀⠔⠁           ⡇
+         ⠈⢆    ⢀⠔⠁            ⢰⠁
+           ⢣  ⡠⠊              ⡜
+        lovelace             ⢀⠇
+                          日本語

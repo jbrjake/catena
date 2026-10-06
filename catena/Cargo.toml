@@ -19,6 +19,7 @@ unicode-width.workspace = true
 
 [dev-dependencies]
 catena-testkit.workspace = true
+insta.workspace = true
 proptest.workspace = true
 
 [[test]]
