@@ -14,7 +14,7 @@ pub const MAX_CELLS: usize = 1 << 22;
 
 /// Bytes a cell's symbol holds. A glyph takes at most four; zero-width followers that do not
 /// fit are dropped, which changes no width. A ceiling, because labels are untrusted input.
-const SYMBOL_BYTES: usize = 15;
+pub(crate) const SYMBOL_BYTES: usize = 15;
 
 /// A cell's content, stored inline so a grid is one allocation and a frame allocates nothing.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]

@@ -13,7 +13,7 @@ mod surface;
         reason = "ResolvedMetrics and label rendering (M1, M2) are its callers"
     )
 )]
-mod text;
+pub(crate) mod text;
 
 pub use blit::{Blitter, ColorSlot, LineGlyphs};
 pub use canvas::SubCellCanvas;

@@ -8,6 +8,8 @@
 
 use unicode_width::UnicodeWidthChar;
 
+use super::grid::SYMBOL_BYTES;
+
 /// Columns `c` occupies. Control characters, which have no width of their own, take none.
 pub(crate) fn char_width(c: char) -> usize {
     c.width().unwrap_or(0)
@@ -18,6 +20,23 @@ pub(crate) fn char_width(c: char) -> usize {
 /// for them can show a gap but never an overrun (plan §7.1).
 pub(crate) fn display_width(text: &str) -> usize {
     text.chars().map(char_width).sum()
+}
+
+/// Cuts `text` to its longest prefix of at most `max_cols` display columns and at most
+/// `max_cols` × [`SYMBOL_BYTES`] bytes, the most a drawn cell holds, and frees what it cut.
+/// The byte bound is what keeps a run of width-0 characters, which take no column, from making
+/// a label unbounded (plan §4.1).
+pub(crate) fn truncate_to_columns(text: &mut String, max_cols: usize) {
+    let max_bytes = max_cols.saturating_mul(SYMBOL_BYTES);
+    let mut cols = 0;
+    for (at, c) in text.char_indices() {
+        cols += char_width(c);
+        if cols > max_cols || at + c.len_utf8() > max_bytes {
+            text.truncate(at);
+            text.shrink_to_fit();
+            return;
+        }
+    }
 }
 
 /// One terminal cell of text: a character of display width 1 or 2 and the zero-width characters

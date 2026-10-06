@@ -17,3 +17,7 @@ pub mod graph;
 mod layout;
 pub mod raster;
 pub mod scene;
+mod view;
+
+pub use graph::{EdgeSpec, GraphError, NodeSpec};
+pub use view::{DEFAULT_MAX_LABEL_COLS, GraphView, GraphViewBuilder};

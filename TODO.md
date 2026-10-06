@@ -5,16 +5,19 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**M1 is closed; M2 (graph model + force layout + viewport, plan §19) is next.** M2 in this
-order, each step green on its own:
+**M2 (graph model + force layout + viewport, plan §19) is under way: step 1, the graph store,
+is done (`## M2` below); step 2, `ResolvedMetrics`, is next.** M2 in this order, each step
+green on its own:
 
-1. The graph store (plan §4): `GraphView<K>`, `Tx` (all-or-nothing `update`), `GraphError`,
-   `EdgeId`, the key-interning table filling `graph::NodeIx`/`EdgeIx`, incident lists, parallel-
-   edge rank, delta classification (`Topology > Geometry > Property`).
+1. ~~The graph store~~ (plan §4): landed.
 2. `ResolvedMetrics` (plan §5): one private measuring function over `text_cells`, the semantic
-   zoom table (`geometry::zoom`, live at last), decorations inside the box, `max_label_cols`;
-   node boxes and the `Label` payload drawn from it (`NodeShape::Box` takes its border from
-   `seed/ui/box_layout.rs`'s `render_box`, which is then deleted).
+   zoom table (`geometry::zoom`, live at last), decorations inside the box, `max_label_cols`
+   (the store already cuts labels to it); node boxes and the `Label` payload drawn from it
+   (`NodeShape::Box` takes its border from `seed/ui/box_layout.rs`'s `render_box`, which is
+   then deleted, and wraps with `word_wrap`, so the "invisible text" item below lands here).
+   The store classifies label edits conservatively (`graph::spec::same_layout`); the measured
+   boxes decide which `Geometry` deltas actually move a node. The store's `Delta` (added,
+   removed, reshaped) collects in `GraphView::pending` for steps 3 and 4 to consume.
 3. Harvest `seed/graph/layout_fr.rs` and its tests by the §18 two-commit procedure into
    `layout/force/` (`ForceLayout`, both repulsion modes, honored `iterations`, no placement-time
    aspect squash, `fmath` throughout), with invariants F and M.
@@ -30,6 +33,43 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
 
 ## Decisions
 
+- **M2: `GraphView` lives in `view.rs` at the crate root; `graph/` is the store.** Plan §3 puts
+  "store, keys, deltas, errors" in `graph/`, and `GraphView` composes the store with positions,
+  the controller and caches (plan §4.2), so it sits above all of them. `catena::{GraphView,
+  GraphViewBuilder, NodeSpec, EdgeSpec, GraphError}` are re-exported at the root for §13.
+- **M2: slots are reused, lowest first, once the transaction that freed them commits.** A
+  `NodeIx`/`EdgeIx` names its node or edge until the next commit; the host's handles are the key
+  and the never-reused `EdgeId`. A freed slot waits for the commit so no index returned inside a
+  transaction names two nodes. Nothing iterates slots on an output path: the store keeps the
+  canonical order (nodes by `(sort key, key)`, the sort key defaulting to the label; edges by
+  their ends' places in node order, lower then higher, then `EdgeId`), and incidence as CSR
+  lists in that order, rebuilt on a topology commit, or on a property commit whose sort-key
+  changes broke an adjacent pair. The interning and edge-id tables are `HashMap`s, lookup only.
+- **M2: a parallel edge's pair is unordered.** Its rank counts the live edges joining the same
+  two nodes either way round that were added before it, since plan §7.3 fans a reciprocal pair
+  as two parallel edges. Ranks close up when a parallel edge leaves.
+- **M2: how edits classify, beyond plan §4.2's lists.** A class is the strongest of the
+  transaction's operations, so adding and removing one node is `Topology`; an edit that leaves a
+  spec equal is no change, and a transaction of only such edits is no delta. An edge's
+  `directed` flip is `Topology` (it changes a DAG's ranks); a pin set, moved or cleared is
+  `Geometry` (a local re-snap moves only that node); a sort key is `Property`. A label edit is
+  `Property` exactly when both labels have the same whitespace characters in the same places and
+  characters of the same width everywhere else, width-0 ones included (`same_layout`): then
+  every measure built from widths and breaks, word wrap included, gives the same box. Counting
+  width-0 characters makes adding a combining mark `Geometry`, which costs a re-snap that moves
+  nothing; skipping them was unsound (property-tested: a word of width-0 characters takes a
+  line in `word_wrap`).
+- **M2: specs are sanitized at the boundary, not rejected,** since plan §4.3's four variants
+  are the whole error surface. Labels and sort keys are cut to `max_label_cols` display columns
+  and to 15 bytes a column (a drawn cell's symbol), freeing the rest, so width-0 runs are
+  bounded too; a NaN weight becomes 1.0 and others clamp into `0..=f32::MAX`; a pin with a NaN
+  coordinate is dropped and others clamp into the `i32` cell range; negative zeros become zero.
+  `max_label_cols` is the builder's (`DEFAULT_MAX_LABEL_COLS` = 256).
+- **M2: small additions to plan §4.2's API.** `Tx::contains_node`/`contains_edge` (an upsert
+  needs them, since a failed `add_node` consumes its spec), `GraphView::node_ix`,
+  `node_count`, `edge_count`, and `GraphView::new()` as `builder().build()`. `EdgeRef` exposes
+  its fields through methods so it can grow. `GraphError` stays exhaustive, as the plan writes
+  it. A panicking `update` closure, like an `Err`, commits nothing.
 - **M1: `Surface::put` writes the first text cell of its symbol and nothing else.** A symbol
   with no text cell (empty, only zero-width or control characters) writes nothing, so every
   surface stays total on any `&str`. A control character is dropped and ends the cell before
@@ -366,6 +406,18 @@ Plan §19, in four steps, each green on its own. The milestone closes on its own
   command as `cargo test -p catena raster:: scene::`, which cargo rejects: two filters go after
   `--`)
 
+## M2 — Graph model + force layout + viewport
+
+Plan §19, in the six steps of `## Now`, each green on its own. The milestone closes on its own
+`verify:` under `## Later milestones`.
+
+- [x] **Step 1: the graph store** — `GraphView<K>`, `Tx` with all-or-nothing `update`,
+  `GraphError`, `EdgeId`, interning into `NodeIx`/`EdgeIx` slots, canonical order, CSR incident
+  lists, parallel-edge rank, delta classification; checked against a model graph through random
+  transactions. verify: `cargo test -p catena -- --list | grep -c
+  'the_store_matches_a_model_through_any_transactions\|a_failed_transaction_leaves_every_slot_id_and_order_as_it_was\|edges_order_by_their_ends_places_then_insertion_with_ranks_per_unordered_pair\|node_edits_classify_by_what_they_change'
+  | grep -qx 4 && cargo test -p catena -- graph:: view::`
+
 ## Course correction (owner rulings A1–A4)
 
 Quoted in full in `docs/design/owner-rulings.md`, with a table of the plan text each overrides.
@@ -423,6 +475,14 @@ Each `verify:` lists the named tests first, because a test filter that matches n
   verify: `cargo test -p catena raster::blit::tests::a_canvas_request_past_the_cell_ceiling_is_bounded`
   (bounded to `MAX_CELLS`: 65 535 columns get 64 rows)
 
+- [ ] **Give invisible text no line in `word_wrap` (M2 step 2)** — a word made only of width-0
+  characters (`"a \u{301}"` at width 1) and the marks of a wide character dropped at width 1
+  (`"日\u{301}"`) each come out as a line that draws nothing, so a `Box` label would grow
+  phantom rows. Found by the `same_layout` property in M2 step 1, which now counts width-0
+  characters and so stays sound either way. Lands with the bordered node box, `word_wrap`'s
+  first caller. verify: `cargo test -p catena -- --list | grep -c
+  'an_invisible_word_takes_no_line\|a_dropped_wide_characters_marks_go_with_it' | grep -qx 2 &&
+  cargo test -p catena -- raster::text`
 - [ ] **Make the tree passes total on any input (M4)** — `compute_subtree_width` and
   `assign_x` recurse once per level, so a chain of ~10⁵ nodes overflows the stack; the BFS has
   no visited set, so shared children are revisited (exponentially in a stack of diamonds) and a

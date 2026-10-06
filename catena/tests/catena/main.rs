@@ -2,4 +2,5 @@
 //! never a new file directly under `tests/`.
 
 mod curves;
+mod graph;
 mod raster;
