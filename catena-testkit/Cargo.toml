@@ -1,0 +1,20 @@
+[package]
+name = "catena-testkit"
+version = "0.1.0"
+description = "Test support for catena: fixtures, raster asserts, visual snapshots, determinism checks"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+autotests = false
+autobenches = false
+
+[lints]
+workspace = true
+
+[dependencies]
+catena.workspace = true
+
+[[test]]
+name = "catena_testkit"
+path = "tests/catena_testkit/main.rs"

@@ -5,10 +5,8 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-M0 step 1: scaffold the workspace per plan §3.1 (root manifest, the three crate manifests with
-`autotests = false` and one `[[test]]` each, profiles, workspace lints, `.cargo/config.toml`
-holding only the xtask alias, `thiserror` + `libm` + an empty `fmath.rs` in `catena`), then
-`CONTRIBUTING.md`.
+M0 step 1, last part: write `CONTRIBUTING.md` with the DCO sign-off requirement and the
+contributor license grant to the repository owner (GitHub `jbrjake`), per plan §3.
 
 ## Decisions
 
@@ -68,7 +66,7 @@ holding only the xtask alias, `thiserror` + `libm` + an empty `fmath.rs` in `cat
 ## M0 — Bootstrap + harvest drop
 
 - [x] **Create the worklist** — this file, from plan §19. verify: `test -f TODO.md`
-- [ ] **Workspace scaffold (plan §3.1)** — root and crate manifests, profiles, lints, alias-only
+- [x] **Workspace scaffold (plan §3.1)** — root and crate manifests, profiles, lints, alias-only
   `.cargo/config.toml`, one test target per crate, `thiserror`/`libm`/empty `fmath.rs` in
   `catena`. verify: `cargo build --workspace --all-targets && cargo test --workspace`
 - [ ] **CONTRIBUTING.md** — DCO sign-off plus the contributor license grant to `jbrjake` (plan

@@ -1,0 +1,21 @@
+[package]
+name = "catena-ratatui"
+version = "0.1.0"
+description = "ratatui widgets for catena's interactive terminal graphs"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+autotests = false
+autobenches = false
+
+[lints]
+workspace = true
+
+[dependencies]
+catena.workspace = true
+ratatui-core.workspace = true
+
+[[test]]
+name = "catena_ratatui"
+path = "tests/catena_ratatui/main.rs"

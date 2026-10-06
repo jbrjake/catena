@@ -1,0 +1,26 @@
+[package]
+name = "catena"
+version = "0.1.0"
+description = "Interactive node-and-edge graphs for terminal UIs: four layouts, four blitters, stable live updates"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+autotests = false
+autobenches = false
+
+[lints]
+workspace = true
+
+[dependencies]
+libm.workspace = true
+thiserror.workspace = true
+
+[[test]]
+name = "catena"
+path = "tests/catena/main.rs"
+
+[[bench]]
+name = "catena"
+path = "benches/catena/main.rs"
+harness = false
