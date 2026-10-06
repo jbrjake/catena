@@ -17,6 +17,12 @@ pub(crate) fn cos(x: f64) -> f64 {
     libm::cos(x)
 }
 
+/// The angle of the vector `(x, y)` from the positive x axis, in `[−π, π]` radians, with the same
+/// bits on every platform.
+pub(crate) fn atan2(y: f64, x: f64) -> f64 {
+    libm::atan2(y, x)
+}
+
 #[cfg(test)]
 mod tests {
     // `allow`, not `expect`: clippy 1.99's `float_cmp` no longer fires on these asserts and
@@ -26,7 +32,7 @@ mod tests {
         reason = "the claim is bit-exact values at the points where they are exactly known"
     )]
 
-    use super::{cos, sin};
+    use super::{atan2, cos, sin};
 
     #[test]
     fn exact_values_hold_bit_for_bit() {
@@ -47,5 +53,18 @@ mod tests {
         assert!((sin(half_pi) - 1.0).abs() <= f64::EPSILON);
         assert!(cos(half_pi).abs() <= f64::EPSILON);
         assert!((sin(std::f64::consts::FRAC_PI_6) - 0.5).abs() <= f64::EPSILON);
+    }
+
+    #[test]
+    fn atan2_covers_every_quadrant() {
+        use std::f64::consts::{FRAC_PI_2, FRAC_PI_4, PI};
+        assert_eq!(atan2(0.0, 1.0), 0.0);
+        assert_eq!(atan2(0.0, -1.0), PI);
+        assert_eq!(atan2(-0.0, -1.0), -PI);
+        assert_eq!(atan2(1.0, 0.0), FRAC_PI_2);
+        assert_eq!(atan2(-1.0, 0.0), -FRAC_PI_2);
+        assert!((atan2(1.0, 1.0) - FRAC_PI_4).abs() <= f64::EPSILON);
+        assert!((atan2(-1.0, -1.0) + 3.0 * FRAC_PI_4).abs() <= 4.0 * f64::EPSILON);
+        assert!(atan2(f64::NAN, 1.0).is_nan());
     }
 }

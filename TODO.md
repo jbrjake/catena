@@ -5,14 +5,10 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**A2: G1 chord cubics, in its own commit** (`docs/design/owner-rulings.md`; A1 is done). In
-`generate_bundled_edges` (`catena/src/layout/radial/chord.rs`), an inter-group edge becomes two
-`geometry::curve::Bezier::Cubic`s meeting at `J = b_root` with matched tangents; the waist arm
-goes next to `default_beta()` with a tuned default; `segments_chain_continuously` is replaced by
-a tangent test. A3 and A4 land with the code they shape (M1 scene, M3 controller, the radial
-view).
+A1 and A2 of the owner's course correction are done (`docs/design/owner-rulings.md`); A3 and
+A4 land with the code they shape (M1 scene, M3 controller, the radial view).
 
-Then M0's last harvest: `git mv seed/tests/visual/svg_renderer.rs
+Next, M0's last harvest: `git mv seed/tests/visual/svg_renderer.rs
 catena-testkit/src/svg.seed.rs` and `seed/tests/visual/snapshots.rs
 catena-testkit/src/svg_snapshots.seed.rs` (one commit, no content change; ported at M1). Then
 run the M0 gate's `verify:` and close M0.
@@ -78,6 +74,24 @@ run the M0 gate's `verify:` and close M0.
   where several pixels outside a bend project onto the same vertex. Both A1 properties were seen
   failing against the seed's sampler (sample-only curves, sample-index dashes) and the dash one
   also against step-count dashing, before the walk made them pass.
+- **A2: the waist is a fraction of the edge's chord, `a = waist · |tgt − src|`.** Dimensionless
+  like β, so the bundle keeps its shape at any canvas size. The chord, not `|b_tgt − b_src|`,
+  because the latter vanishes in the ruling's own degenerate case; `d` falls back to
+  `unit(tgt − src)` when `|b_tgt − b_src| ≤ 1e-9 · max(chord, 1)`, and a zero chord gives zero
+  arms. `generate_bundled_edges` takes `waist` after `beta`; `default_waist()` sits beside
+  `default_beta()`.
+- **A2: the default waist, 0.24, minimizes bending energy.** At the default β the mean of
+  `chord · ∫ κ² ds` over the test wheels' inter-group edges bottoms out near 0.245 and is flat
+  from 0.22 to 0.26 (β = 0.5 and 1.0 put it at 0.22 and 0.26); 0.12 costs 58% more bending and
+  0.48 134% more, which is the pinch and the balloon the ruling describes. The other objective
+  tried, staying closest to the seed's C⁰ chain, has its optimum at a zero arm, which is a stall
+  point at J and no tangent at all, so it was dropped. At most 0.25 keeps the β = 0 chain from
+  doubling back past its quarter points. Even so the ruling's cubics start on `b_src` itself, so
+  they pull harder toward the group than the seed's quadratics did: at the default the chain sits
+  a mean 3.0 sub-pixels from the seed's on a 100-sub-pixel-radius wheel.
+- **A2: `fmath::atan2` joins `sin` and `cos`,** for the tangent-angle test (the radial engine will
+  need it too). The chord tests split into `chord_tests.rs` (the seed's), `chord_g1_tests.rs`
+  (A2's) and `chord_wheel_tests.rs` (their shared wheel), to stay under the 500-line target.
 - **A1: the seed characterization keeps what A1 leaves.** 16 of the 33 rasters stay dot for dot
   (lines, hop lines, circles, axis-aligned dashes); the 7 solid curves keep every dot the seed
   plotted, now joined into a connected line; the 10 dashed rasters on curves and slopes are
@@ -181,7 +195,7 @@ Each `verify:` lists the named tests first, because a test filter that matches n
   verify: `cargo test -p catena -- --list | grep -c
   'invariant_e_holds_on_tessellated_curves\|dash_and_gap_lengths_follow_the_pattern' | grep -qx
   2 && cargo test -p catena && ! grep -rq "counted by sample index" catena/src`
-- [ ] **A2 — chord edges are G1** (own commit, after the chord port `b986741`) — an inter-group
+- [x] **A2 — chord edges are G1** (own commit, after the chord port `b986741`) — an inter-group
   edge is the cubics `(src, b_src, J − a·d, J)` and `(J, J + a·d, b_tgt, tgt)`, `J = b_root`,
   `d = unit(b_tgt − b_src)` or `unit(tgt − src)` when degenerate; the waist arm `a` exposed next
   to β with a tuned default. Tests: tangent angle at J < 1e-9 rad; collinear at β = 0 with the

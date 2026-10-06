@@ -1,49 +1,5 @@
+use super::test_wheel::{Wheel, controls, dist, quadratic_ctrl};
 use super::*;
-
-/// Distance from `(cx, cy)` to `(x, y)`.
-fn dist(x: f64, y: f64, cx: f64, cy: f64) -> f64 {
-    let (dx, dy) = (x - cx, y - cy);
-    (dx * dx + dy * dy).sqrt()
-}
-
-/// Groups and nodes placed on a 100-radius canvas centred at (100, 100), as the three lookup
-/// maps `generate_bundled_edges` takes.
-struct Wheel {
-    nodes: HashMap<usize, NodePosition>,
-    node_groups: HashMap<usize, u32>,
-    groups: HashMap<u32, GroupPosition>,
-}
-
-impl Wheel {
-    fn new(group_sizes: &[(u32, usize)], node_groups: &[(usize, u32)]) -> Self {
-        let arcs = compute_arcs(group_sizes);
-        let (r_inner, r_outer) = ring_radii(100.0);
-        let nodes = place_nodes(&arcs, node_groups, 100.0, 100.0, r_outer);
-        let groups = place_groups(&arcs, 100.0, 100.0, r_inner);
-        Wheel {
-            nodes: nodes.iter().map(|p| (p.node_index, *p)).collect(),
-            node_groups: node_groups.iter().copied().collect(),
-            groups: groups.iter().map(|p| (p.group, *p)).collect(),
-        }
-    }
-
-    /// Two groups of two: nodes 0 and 1 in group 0, nodes 2 and 3 in group 1.
-    fn two_by_two() -> Self {
-        Wheel::new(&[(0, 2), (1, 2)], &[(0, 0), (1, 0), (2, 1), (3, 1)])
-    }
-
-    fn bundle(&self, relations: &[(usize, usize)], beta: f64) -> Vec<BundledEdge> {
-        generate_bundled_edges(
-            relations,
-            &self.nodes,
-            &self.node_groups,
-            &self.groups,
-            100.0,
-            100.0,
-            beta,
-        )
-    }
-}
 
 // ── Arc allocation tests ───────────────────────────────────────
 
@@ -310,33 +266,20 @@ fn inter_group_edge_has_two_segments() {
     assert_eq!(
         edges[0].segments.len(),
         2,
-        "Inter-group edges use two quadratic Bezier segments chained through root"
+        "Inter-group edges use two cubic Bezier segments chained through root"
+    );
+    assert!(
+        edges[0]
+            .segments
+            .iter()
+            .all(|s| matches!(s, Bezier::Cubic { .. })),
+        "{:?}",
+        edges[0].segments
     );
 }
 
-#[test]
-fn segments_chain_continuously() {
-    // The end of segment N must equal the start of segment N+1.
-    let edges = Wheel::two_by_two().bundle(&[(0, 2)], 0.85);
-
-    assert_eq!(edges.len(), 1);
-    for edge in &edges {
-        for i in 0..edge.segments.len() - 1 {
-            let end = &edge.segments[i];
-            let start = &edge.segments[i + 1];
-            assert!(
-                (end.x1 - start.x0).abs() < 0.001 && (end.y1 - start.y0).abs() < 0.001,
-                "Segment {} end ({:.1}, {:.1}) != segment {} start ({:.1}, {:.1})",
-                i,
-                end.x1,
-                end.y1,
-                i + 1,
-                start.x0,
-                start.y0
-            );
-        }
-    }
-}
+// The seed's `segments_chain_continuously` (C⁰) is replaced by the G1 tests in
+// `chord_g1_tests.rs` (owner ruling A2).
 
 #[test]
 fn beta_zero_gives_straight_control_points() {
@@ -345,18 +288,13 @@ fn beta_zero_gives_straight_control_points() {
     let edges = wheel.bundle(&[(0, 1)], 0.0);
 
     assert_eq!(edges.len(), 1);
-    let seg = &edges[0].segments[0];
+    let (ctrl_x, ctrl_y) = quadratic_ctrl(&edges[0].segments[0]);
     let (src, tgt) = (&wheel.nodes[&0], &wheel.nodes[&1]);
     let expected_ctrl_x = f64::midpoint(src.px, tgt.px);
     let expected_ctrl_y = f64::midpoint(src.py, tgt.py);
     assert!(
-        (seg.ctrl_x - expected_ctrl_x).abs() < 0.001
-            && (seg.ctrl_y - expected_ctrl_y).abs() < 0.001,
-        "Beta=0 control should be straight-line midpoint, got ({:.1}, {:.1}) expected ({:.1}, {:.1})",
-        seg.ctrl_x,
-        seg.ctrl_y,
-        expected_ctrl_x,
-        expected_ctrl_y
+        (ctrl_x - expected_ctrl_x).abs() < 0.001 && (ctrl_y - expected_ctrl_y).abs() < 0.001,
+        "Beta=0 control should be straight-line midpoint, got ({ctrl_x:.1}, {ctrl_y:.1}) expected ({expected_ctrl_x:.1}, {expected_ctrl_y:.1})",
     );
 }
 
@@ -368,13 +306,11 @@ fn beta_one_gives_tree_path_control_points() {
     let edges = wheel.bundle(&[(0, 1)], 1.0);
 
     assert_eq!(edges.len(), 1);
-    let seg = &edges[0].segments[0];
+    let (ctrl_x, ctrl_y) = quadratic_ctrl(&edges[0].segments[0]);
     let group = &wheel.groups[&0];
     assert!(
-        (seg.ctrl_x - group.px).abs() < 0.001 && (seg.ctrl_y - group.py).abs() < 0.001,
-        "Beta=1 control should be group position, got ({:.1}, {:.1}) expected ({:.1}, {:.1})",
-        seg.ctrl_x,
-        seg.ctrl_y,
+        (ctrl_x - group.px).abs() < 0.001 && (ctrl_y - group.py).abs() < 0.001,
+        "Beta=1 control should be group position, got ({ctrl_x:.1}, {ctrl_y:.1}) expected ({:.1}, {:.1})",
         group.px,
         group.py
     );
@@ -393,15 +329,13 @@ fn bundled_edge_control_points_inside_outer_ring() {
     assert_eq!(edges.len(), relations.len());
     for edge in &edges {
         for seg in &edge.segments {
-            let ctrl_dist = dist(seg.ctrl_x, seg.ctrl_y, 100.0, 100.0);
-            assert!(
-                ctrl_dist < r_outer + 1.0,
-                "Control point ({:.1}, {:.1}) at dist {:.1} should be inside outer ring {:.1}",
-                seg.ctrl_x,
-                seg.ctrl_y,
-                ctrl_dist,
-                r_outer
-            );
+            for (x, y) in controls(seg) {
+                let ctrl_dist = dist(x, y, 100.0, 100.0);
+                assert!(
+                    ctrl_dist < r_outer + 1.0,
+                    "Control point ({x:.1}, {y:.1}) at dist {ctrl_dist:.1} should be inside outer ring {r_outer:.1}",
+                );
+            }
         }
     }
 }
@@ -437,12 +371,14 @@ fn edge_starts_at_source_ends_at_target() {
         let first_seg = &edge.segments[0];
         let last_seg = edge.segments.last().unwrap();
 
-        assert!(
-            (first_seg.x0 - src.px).abs() < 0.001 && (first_seg.y0 - src.py).abs() < 0.001,
+        assert_eq!(
+            first_seg.start(),
+            (src.px, src.py),
             "Edge {i} first segment should start at source node"
         );
-        assert!(
-            (last_seg.x1 - tgt.px).abs() < 0.001 && (last_seg.y1 - tgt.py).abs() < 0.001,
+        assert_eq!(
+            last_seg.end(),
+            (tgt.px, tgt.py),
             "Edge {i} last segment should end at target node"
         );
     }

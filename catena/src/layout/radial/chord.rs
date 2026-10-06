@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::f64::consts::PI;
 
 use crate::fmath;
+use crate::geometry::curve::Bezier;
 
 /// A group's angular sector on the radial layout.
 #[derive(Debug, Clone)]
@@ -51,27 +52,16 @@ pub(crate) struct GroupPosition {
     pub py: f64,
 }
 
-/// A bundled edge rendered as a sequence of quadratic Bezier segments.
+/// A bundled edge rendered as a chain of Bézier segments.
 ///
-/// Intra-group edges use one segment (node → group → node).
-/// Inter-group edges use two segments chained through the root.
+/// Intra-group edges use one quadratic (node → group → node).
+/// Inter-group edges use two cubics chained through the root with matched tangents (G1).
 #[derive(Debug, Clone)]
 pub(crate) struct BundledEdge {
-    /// Quadratic Bezier segments: each is (start, control, end).
-    pub segments: Vec<BezierSegment>,
+    /// The chain, each segment starting where the previous one ends.
+    pub segments: Vec<Bezier>,
     /// Whether the edge crosses group boundaries.
     pub inter_group: bool,
-}
-
-/// A single quadratic Bezier segment: B(t) = (1-t)^2 P0 + 2(1-t)t C + t^2 P1.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct BezierSegment {
-    pub x0: f64,
-    pub y0: f64,
-    pub ctrl_x: f64,
-    pub ctrl_y: f64,
-    pub x1: f64,
-    pub y1: f64,
 }
 
 /// Gap between group arcs in radians (~3 degrees).
@@ -81,6 +71,14 @@ const ARC_GAP_RAD: f64 = 3.0 * PI / 180.0;
 /// straight line (0.0). 0.85 produces tight bundles with visible spread
 /// at endpoints, matching graph-tool's typical output.
 const BUNDLING_BETA: f64 = 0.85;
+
+/// Default waist: the control-arm length at the bundle root, as a fraction of the edge's chord
+/// (owner ruling A2). A short arm pinches the bundle's waist at the root; a long one loosens it
+/// until the curve overshoots. Tuned to the fairest chain: at the default β the mean bending
+/// energy `∫ κ² ds` of the test wheels' inter-group edges bottoms out near 0.245
+/// (`default_waist_minimizes_the_bending_energy`). At most 0.25, so the β = 0 chain never
+/// doubles back on its straight line.
+const BUNDLING_WAIST: f64 = 0.24;
 
 /// Inner ring radius as a fraction of canvas radius.
 const INNER_RING_RATIO: f64 = 0.40;
@@ -243,14 +241,62 @@ fn bundle_point(
     )
 }
 
+/// `v` scaled to unit length, or `None` when it is too short (relative to `scale`) to have a
+/// direction worth trusting.
+fn unit((x, y): (f64, f64), scale: f64) -> Option<(f64, f64)> {
+    let len = (x * x + y * y).sqrt();
+    (len > 1e-9 * scale.max(1.0)).then(|| (x / len, y / len))
+}
+
+/// The two G1 cubics of an inter-group edge (owner ruling A2): `(src, b_src, J − a·d, J)` and
+/// `(J, J + a·d, b_tgt, tgt)`, where `J` is the bundled root, `d` the unit direction from the
+/// bundled source-group control to the bundled target-group one (from `src` to `tgt` when those
+/// coincide), and `a = waist · |tgt − src|`. Both cubics leave `J` along `d` at speed `3a`, so
+/// the chain is C¹ there and the tangent turns not at all.
+fn g1_chain(
+    src: (f64, f64),
+    b_src: (f64, f64),
+    root: (f64, f64),
+    b_tgt: (f64, f64),
+    tgt: (f64, f64),
+    waist: f64,
+) -> [Bezier; 2] {
+    let chord = (tgt.0 - src.0, tgt.1 - src.1);
+    let chord_len = (chord.0 * chord.0 + chord.1 * chord.1).sqrt();
+    let d = unit((b_tgt.0 - b_src.0, b_tgt.1 - b_src.1), chord_len)
+        .or_else(|| unit(chord, chord_len))
+        .unwrap_or((0.0, 0.0));
+    let arm = waist * chord_len;
+    let (ax, ay) = (arm * d.0, arm * d.1);
+    [
+        Bezier::Cubic {
+            from: src,
+            ctrl0: b_src,
+            ctrl1: (root.0 - ax, root.1 - ay),
+            to: root,
+        },
+        Bezier::Cubic {
+            from: root,
+            ctrl0: (root.0 + ax, root.1 + ay),
+            ctrl1: b_tgt,
+            to: tgt,
+        },
+    ]
+}
+
 /// Generate bundled edges using Holten's hierarchical edge bundling.
 ///
 /// For each relation, computes Bezier control points along the hierarchy
 /// tree path. The bundling strength (beta) controls how tightly edges
-/// follow the tree vs. taking a straight line.
+/// follow the tree vs. taking a straight line; the waist sets an inter-group
+/// edge's control-arm length at the root, as a fraction of its chord.
 ///
 /// Hierarchy path for intra-group: `node_u → group → node_v`
 /// Hierarchy path for inter-group: `node_u → group_a → root → group_b → node_v`
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the seed's signature plus the waist; the radial engine (M5) bundles these"
+)]
 pub(crate) fn generate_bundled_edges(
     relations: &[(usize, usize)],
     node_positions: &HashMap<usize, NodePosition>,
@@ -259,6 +305,7 @@ pub(crate) fn generate_bundled_edges(
     center_x: f64,
     center_y: f64,
     beta: f64,
+    waist: f64,
 ) -> Vec<BundledEdge> {
     let mut edges = Vec::with_capacity(relations.len());
 
@@ -286,13 +333,10 @@ pub(crate) fn generate_bundled_edges(
             let (ctrl_x, ctrl_y) = bundle_point(group.px, group.py, s_mid_x, s_mid_y, beta);
 
             edges.push(BundledEdge {
-                segments: vec![BezierSegment {
-                    x0: src.px,
-                    y0: src.py,
-                    ctrl_x,
-                    ctrl_y,
-                    x1: tgt.px,
-                    y1: tgt.py,
+                segments: vec![Bezier::Quadratic {
+                    from: (src.px, src.py),
+                    ctrl: (ctrl_x, ctrl_y),
+                    to: (tgt.px, tgt.py),
                 }],
                 inter_group: false,
             });
@@ -329,28 +373,19 @@ pub(crate) fn generate_bundled_edges(
             beta,
         );
 
-        // Split into two quadratic Bezier segments:
-        // Segment 1: src → bundled_src_group (control) → bundled_root
-        // Segment 2: bundled_root → bundled_tgt_group (control) → tgt
+        // Two cubics through the bundled root, tangent there (owner ruling A2). The seed's two
+        // quadratics, (src, b_src_grp, b_root) and (b_root, b_tgt_grp, tgt), kinked at the root
+        // whenever the group controls were not collinear with it.
         edges.push(BundledEdge {
-            segments: vec![
-                BezierSegment {
-                    x0: src.px,
-                    y0: src.py,
-                    ctrl_x: b_src_grp_x,
-                    ctrl_y: b_src_grp_y,
-                    x1: b_root_x,
-                    y1: b_root_y,
-                },
-                BezierSegment {
-                    x0: b_root_x,
-                    y0: b_root_y,
-                    ctrl_x: b_tgt_grp_x,
-                    ctrl_y: b_tgt_grp_y,
-                    x1: tgt.px,
-                    y1: tgt.py,
-                },
-            ],
+            segments: g1_chain(
+                (src.px, src.py),
+                (b_src_grp_x, b_src_grp_y),
+                (b_root_x, b_root_y),
+                (b_tgt_grp_x, b_tgt_grp_y),
+                (tgt.px, tgt.py),
+                waist,
+            )
+            .to_vec(),
             inter_group: true,
         });
     }
@@ -386,6 +421,19 @@ pub(crate) fn default_beta() -> f64 {
     BUNDLING_BETA
 }
 
+/// Return the default waist: the control-arm length at the root, as a fraction of the chord.
+pub(crate) fn default_waist() -> f64 {
+    BUNDLING_WAIST
+}
+
+#[cfg(test)]
+#[path = "chord_wheel_tests.rs"]
+mod test_wheel;
+
 #[cfg(test)]
 #[path = "chord_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "chord_g1_tests.rs"]
+mod g1_tests;
