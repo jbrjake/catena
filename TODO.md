@@ -5,12 +5,12 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-M0 step 4, tree: `git mv seed/graph/tree_layout.rs` and `tree_layout_tests.rs` to
-`catena/src/layout/tree/tree_layout.seed.rs` and `tree_layout_tests.seed.rs` (commit 1), then
-port (commit 2): fix the "Walker O(n)" header (it is naive centered-parent subtree packing,
-plan §9.3), drop `route_connectors`'s unused `_root` and `_h_gap`, and make the `i16`
-arithmetic saturate instead of overflowing (red first: a tall chain whose depth offsets pass
-`i16::MAX` panics in the seed). The spanning-forest guard and scene wiring are M4.
+M0 step 4, testkit fixtures: `git mv seed/fixtures/community.json
+catena-testkit/fixtures/community.json` (one commit: verbatim, and JSON needs no staging name),
+then a loader commit: `catena_testkit::fixtures` with `serde`/`serde_json` (enter the testkit's
+dependencies here), a `parse` with a byte ceiling and `deny_unknown_fields`, adversarial
+fixture tests (malformed, unknown field, missing field, negative group, oversized), and a test
+that pins every plan §20 fact about the community graph.
 
 ## Decisions
 
@@ -107,7 +107,7 @@ arithmetic saturate instead of overflowing (red first: a tall chain whose depth 
   pinned. verify: `cargo test -p catena flex && test -z "$(git ls-files seed/ui/flex_layout.rs)"`
 - [x] **Harvest `word_wrap`** → `catena/src/raster/text.rs`, in display columns with the §18
   semantics. verify: `cargo test -p catena text`
-- [ ] **Harvest tree_layout + tests** → `catena/src/layout/tree/`, header fixed, unused parameters
+- [x] **Harvest tree_layout + tests** → `catena/src/layout/tree/`, header fixed, unused parameters
   removed. verify: `cargo test -p catena tree && test -z "$(git ls-files seed/graph/tree_layout.rs
   seed/graph/tree_layout_tests.rs)"`
 - [ ] **Testkit fixtures** — `fixtures/community.json` moved verbatim, plus its loader.
@@ -137,6 +137,16 @@ arithmetic saturate instead of overflowing (red first: a tall chain whose depth 
   verify: `cargo test -p catena raster::` with a test that a `u16::MAX`-square canvas request is
   either refused or bounded
 
+- [ ] **Make the tree passes total on any input (M4)** — `compute_subtree_width` and
+  `assign_x` recurse once per level, so a chain of ~10⁵ nodes overflows the stack; the BFS has
+  no visited set, so shared children are revisited (exponentially in a stack of diamonds) and a
+  cycle never terminates. The M4 spanning-forest guard (plan §9.3, ledger row 34) should come
+  with iterative passes. verify: `cargo test -p catena tree::` with a 200 000-node chain, a
+  32-level diamond stack and a 3-cycle, each finishing in < 1 s
+- [ ] **Widen tree coordinates past `i16` (M4)** — the seed's `TreePosition` is `i16`, so the
+  port saturates: a tree taller or wider than 32 767 cells clamps and overlaps. Scene cells are
+  wider; switch when the tree feeds the scene. verify: `cargo test -p catena tree::` with a
+  40 000-row node keeping its child strictly below it
 - [ ] **Drop the harvest's dead-code attributes once callers land** — the M0 ports are wired
   to nothing yet, so their modules carry `cfg_attr(not(test), expect(dead_code))`, and `fmath`
   an `allow` (rustc 1.88 does not report it, 1.97 does). Each goes when its engine lands (M2,

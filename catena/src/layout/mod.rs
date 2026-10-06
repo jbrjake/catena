@@ -4,3 +4,4 @@
 pub(crate) mod force;
 pub(crate) mod layered;
 pub(crate) mod radial;
+pub(crate) mod tree;
