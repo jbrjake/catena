@@ -4,8 +4,15 @@ fn level(zoom: f64) -> u8 {
     SemanticZoomTable::default().level(zoom).index()
 }
 
+/// The seed's `visual_label_width`: a measured width held to its level's cap.
+fn visual_width(table: &SemanticZoomTable, measured: u16, level: u8) -> u16 {
+    table
+        .cap(SemanticZoom(level))
+        .map_or(measured, |cap| measured.min(cap))
+}
+
 fn visual_label_width(layout_width: u16, zoom_level: u8) -> u16 {
-    SemanticZoomTable::default().visual_width(layout_width, SemanticZoom(zoom_level))
+    visual_width(&SemanticZoomTable::default(), layout_width, zoom_level)
 }
 
 #[test]
@@ -112,9 +119,10 @@ fn a_custom_table_replaces_the_defaults() {
     assert_eq!(table.level(0.5).index(), 2);
     assert_eq!(table.level(2.0).index(), 4);
     assert_eq!(table.level(3.3).index(), 5);
-    assert_eq!(table.visual_width(30, SemanticZoom(0)), 2);
-    assert_eq!(table.visual_width(30, SemanticZoom(3)), 20);
-    assert_eq!(table.visual_width(300, SemanticZoom(5)), 300);
+    assert_eq!(visual_width(&table, 30, 0), 2);
+    assert_eq!(visual_width(&table, 30, 3), 20);
+    assert_eq!(visual_width(&table, 300, 5), 300);
+    assert_eq!(table.cap(SemanticZoom(5)), None, "level 5 has no cap");
 }
 
 #[test]

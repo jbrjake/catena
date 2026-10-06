@@ -33,6 +33,34 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
 
 ## Decisions
 
+- **M2: `ResolvedMetrics` holds each node's measured form, not its position.** A form is the
+  box's size and exactly what the node draws in it (`geometry::NodeForm`); the snapper (step 4)
+  places it, and the positioned box is that origin plus this size. Plan §5's `boxes:
+  Vec<CellBox>` cannot carry positions, since pan moves them every frame while metrics change
+  only per zoom level or geometry delta. `anchor` is a method, the middle cell rounding up and
+  left, so it cannot disagree with the size. `measure` is `pub(super)`, private to `geometry/`
+  as §5 rules. `GraphView` measures on every commit (`ResolvedMetrics::apply`): removed slots
+  forget their form, added, relabeled and reshaped nodes are measured, and `reshaped` keeps
+  only the nodes whose size changed, which is how measured boxes decide what moves.
+- **M2: three node forms, decorations inside the box (plan §5).** Level 0, and any cap too
+  narrow for brackets, draws one glyph: a `Glyph` node's character, else the label's first text
+  cell that is not whitespace, else the glyph set's dot; one that is wider than the cap (`日`
+  at cap 1) or is no glyph at all (width 0) gives way to the dot. So level 0's width is the
+  glyph's, at most the cap, rather than the seed's "the cap itself"; `visual_width` became
+  `SemanticZoomTable::cap`. Levels 1 to 5 draw one row, `*`, the node's glyph, then `[label]`:
+  §5's "glyph prefix" is a `Glyph` node's character, which with no visible label draws alone
+  (a `Label` node with an empty label draws `[]`). The pin marker is dropped only where a lone
+  glyph is drawn. Past the cap the label is cut to its longest run of leading text cells that
+  fits, less trailing blank cells, then `…`, so a wide character never splits and the box can
+  be a column under the cap. A `Box` draws a single border (the seed's live style; nothing
+  asks for its double one) around the label word-wrapped to the cap less 2, then shrinks to the
+  widest line; it is at least `min_w` up to the cap (the level's promise wins), at least `min_h`
+  always, and at least 3 × 3, with the pin marker in its top border's second cell, so a pin
+  never resizes it. Every width is a sum of text-cell widths, so `same_layout` labels measure
+  alike (property-tested at every cap from 1 to 24).
+- **M2: a view starts at zoom 1.0** (`DEFAULT_ZOOM`, one world unit per cell column, the
+  identity), which is semantic level 2, so labels show `[truncated]` to 14 columns until zoomed.
+  The seed excerpts carry no starting zoom, so this is a choice, not a harvest.
 - **M2: `GraphView` lives in `view.rs` at the crate root; `graph/` is the store.** Plan §3 puts
   "store, keys, deltas, errors" in `graph/`, and `GraphView` composes the store with positions,
   the controller and caches (plan §4.2), so it sits above all of them. `catena::{GraphView,

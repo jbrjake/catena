@@ -62,6 +62,15 @@ pub fn text_cells(text: &str) -> TextCells<'_> {
     TextCells { rest: text }
 }
 
+/// Each of `text`'s cells, as [`text_cells`] splits it, with the byte offset just past it.
+pub(crate) fn text_cells_with_ends(text: &str) -> impl Iterator<Item = (TextCell<'_>, usize)> {
+    let mut cells = text_cells(text);
+    std::iter::from_fn(move || {
+        let cell = cells.next()?;
+        Some((cell, text.len() - cells.rest.len()))
+    })
+}
+
 /// The iterator [`text_cells`] returns.
 #[derive(Debug, Clone)]
 pub struct TextCells<'a> {

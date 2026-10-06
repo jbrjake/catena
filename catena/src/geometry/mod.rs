@@ -2,12 +2,11 @@
 
 pub mod cell;
 pub mod curve;
-
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "ResolvedMetrics and the viewport (M2) are its first callers"
-    )
-)]
+mod metrics;
+#[cfg(test)]
+pub(crate) mod testing;
 mod zoom;
+
+pub(crate) use metrics::ResolvedMetrics;
+pub use metrics::{FormShape, Mark, NodeForm, RowLabel};
+pub(crate) use zoom::{DEFAULT_ZOOM, SemanticZoomTable};

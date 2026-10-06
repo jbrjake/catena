@@ -8,10 +8,22 @@
 
 /// The smallest zoom the controller allows (the seed's `zoom_out` clamp in
 /// `seed/app/navigation.rs`).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "the viewport (M2 step 4) clamps to it")
+)]
 pub(crate) const MIN_ZOOM: f64 = 0.1;
 
 /// The largest zoom the controller allows (the seed's `zoom_in` clamp).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "the viewport (M2 step 4) clamps to it")
+)]
 pub(crate) const MAX_ZOOM: f64 = 4.0;
+
+/// The zoom a view starts at: one world unit to one cell column, which semantic zoom shows at
+/// level 2, `[truncated]` labels.
+pub(crate) const DEFAULT_ZOOM: f64 = 1.0;
 
 /// One of the six semantic detail levels: 0 draws a single glyph, 5 the full label.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -61,6 +73,10 @@ impl SemanticZoomTable {
     /// width caps in display columns. `None` unless the ceilings are finite and strictly
     /// increasing and the caps are at least 1 and non-decreasing, since a level that shows
     /// more detail must not be narrower than the one below it.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "the builder (M2 step 4) takes a custom table")
+    )]
     pub(crate) fn new(upper: [f64; 5], caps: [u16; 5]) -> Option<Self> {
         let ceilings_ok =
             upper.iter().all(|u| u.is_finite()) && upper.windows(2).all(|pair| pair[0] < pair[1]);
@@ -82,18 +98,11 @@ impl SemanticZoomTable {
         SemanticZoom(u8::try_from(below).expect("at most five ceilings"))
     }
 
-    /// The display width a node whose full label box measures `measured` columns occupies at
-    /// `level`. Level 0 draws one glyph whatever the label, so its width is the cap itself;
-    /// levels 1 to 4 truncate to their cap; level 5 keeps the measured width.
-    ///
-    /// The layout reserves, and edges attach to, this visual width, so lines meet the label
-    /// that is actually drawn.
-    pub(crate) fn visual_width(&self, measured: u16, level: SemanticZoom) -> u16 {
-        match level.index() {
-            0 => self.caps[0],
-            i @ 1..=4 => measured.min(self.caps[usize::from(i)]),
-            _ => measured,
-        }
+    /// The most display columns a node may take at `level`, decorations included; `None` at
+    /// level 5, which only `max_label_cols` bounds. Level 0 draws one glyph, so its cap bounds
+    /// that glyph's width.
+    pub(crate) fn cap(&self, level: SemanticZoom) -> Option<u16> {
+        self.caps.get(usize::from(level.index())).copied()
     }
 }
 

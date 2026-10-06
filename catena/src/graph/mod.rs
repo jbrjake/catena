@@ -21,6 +21,8 @@ mod tx;
 
 pub(crate) use delta::{Delta, DeltaClass};
 pub use error::GraphError;
+#[cfg(test)]
+pub(crate) use spec::same_layout;
 pub use spec::{EdgeClass, EdgeSpec, NodeShape, NodeSpec};
 pub use store::EdgeRef;
 pub(crate) use store::{GraphStore, Limits};

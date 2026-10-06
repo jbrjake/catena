@@ -1,8 +1,9 @@
-//! [`GraphView`], the one object a host holds (plan §4.2, §13): the graph store now, and with
-//! later milestones its positions, controller and caches.
+//! [`GraphView`], the one object a host holds (plan §4.2, §13): the graph store and every
+//! node's measured box now, and with later milestones its positions, controller and caches.
 
 use std::marker::PhantomData;
 
+use crate::geometry::{DEFAULT_ZOOM, ResolvedMetrics, SemanticZoomTable};
 use crate::graph::{Delta, EdgeId, EdgeRef, GraphError, GraphStore, Key, Limits, NodeIx, Tx};
 
 /// The default ceiling on a label's display columns (plan §4.1).
@@ -12,7 +13,10 @@ pub const DEFAULT_MAX_LABEL_COLS: u16 = 256;
 #[derive(Debug, Clone)]
 pub struct GraphView<K: Key> {
     store: GraphStore<K>,
-    /// Every commit since the layout last caught up, absorbed in order.
+    /// Every node's form at the current semantic zoom level, kept in step with each commit.
+    metrics: ResolvedMetrics,
+    /// Every commit since the layout last caught up, absorbed in order, its reshapes cut to
+    /// the nodes whose measured box changed.
     pending: Delta,
 }
 
@@ -36,8 +40,11 @@ impl<K: Key> GraphViewBuilder<K> {
     /// The configured view, with an empty graph.
     #[must_use]
     pub fn build(self) -> GraphView<K> {
+        let table = SemanticZoomTable::default();
+        let level = table.level(DEFAULT_ZOOM);
         GraphView {
             store: GraphStore::new(self.max_label_cols, Limits::default()),
+            metrics: ResolvedMetrics::new(table, level),
             pending: Delta::default(),
         }
     }
@@ -75,7 +82,8 @@ impl<K: Key> GraphView<K> {
         &mut self,
         f: impl FnOnce(&mut Tx<'_, K>) -> Result<T, GraphError<K>>,
     ) -> Result<T, GraphError<K>> {
-        let (out, delta) = self.store.transact(f)?;
+        let (out, mut delta) = self.store.transact(f)?;
+        self.metrics.apply(&self.store, &mut delta);
         self.pending.absorb(delta);
         Ok(out)
     }

@@ -1,6 +1,7 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use super::*;
+use crate::geometry::NodeForm;
 use crate::graph::{DeltaClass, EdgeSpec, NodeSpec};
 
 fn two_nodes() -> GraphView<String> {
@@ -83,6 +84,39 @@ fn the_builder_sets_the_label_ceiling() {
     );
     let default: GraphView<u64> = GraphView::new();
     assert_eq!(default.store.max_label_cols, DEFAULT_MAX_LABEL_COLS);
+}
+
+#[test]
+fn every_commit_is_measured_and_only_boxes_that_changed_stay_reshaped() {
+    let mut gv = two_nodes();
+    let width = |gv: &GraphView<String>, key: &str| {
+        let ix = gv.node_ix(&key.to_string()).expect("live");
+        gv.metrics.form(ix).map(NodeForm::width)
+    };
+    // The view starts at zoom 1.0, semantic level 2: labels cut at 14 columns.
+    assert_eq!(
+        (width(&gv, "ada"), width(&gv, "babbage")),
+        (Some(14), Some(14))
+    );
+
+    gv.pending = Delta::default();
+    gv.update(|tx| {
+        tx.set_node(&"babbage".into(), |n| {
+            n.label = "Charles Babbage, FRS".into();
+        })
+    })
+    .expect("known");
+    assert_eq!(gv.pending.class, Some(DeltaClass::Geometry));
+    assert!(
+        gv.pending.reshaped.is_empty(),
+        "a longer label already cut at the cap moves nothing"
+    );
+
+    gv.update(|tx| tx.set_node(&"ada".into(), |n| n.label = "Ada".into()))
+        .expect("known");
+    let ada = gv.node_ix(&"ada".into()).expect("live");
+    assert_eq!(gv.pending.reshaped.iter().collect::<Vec<_>>(), [&ada]);
+    assert_eq!(width(&gv, "ada"), Some(5));
 }
 
 #[test]

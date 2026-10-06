@@ -6,13 +6,6 @@ mod canvas;
 mod grid;
 mod polyline;
 mod surface;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "ResolvedMetrics and label rendering (M1, M2) are its callers"
-    )
-)]
 pub(crate) mod text;
 
 pub use blit::{Blitter, ColorSlot, LineGlyphs};
