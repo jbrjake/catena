@@ -36,7 +36,8 @@ one CI's `check` runs (owner ruling); a container's `stable` can lag, so check `
 ## Standing decisions
 
 - `docs/design/initial-catena-plan.md` is the design authority. Its §21 is ruled, so departing
-  from it is a question for the owner.
+  from it is a question for the owner. `docs/design/owner-rulings.md` amends it without editing
+  it, and wins where they conflict.
 - `seed/` is harvest input: never compiled, never edited in place. A file leaves by `git mv` to
   `<target>.seed.rs`, then a separate port commit (plan §18), because the port diff is the record
   of what changed.
@@ -57,6 +58,7 @@ one CI's `check` runs (owner ruling); a container's `stable` can lag, so check `
 
 - `docs/design/initial-catena-plan.md`: design, gates (§17), seed manifest (§18), milestones
   (§19), fixtures (§20), decisions (§21).
+- `docs/design/owner-rulings.md`: the owner's later rulings, quoted, with what each overrides.
 - `TODO.md`: the worklist.
 
 <!-- baseline:begin — pasted from portfolio/CLAUDE-BASELINE.md; edit it there, never here -->

@@ -5,8 +5,12 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**Confirm CI green on rustc 1.99.** The eight clippy-1.99 sites are fixed and `regression.sh`
-passes locally on 1.99; confirm all three `check` legs and `msrv` green on the push.
+**Absorb the owner's course correction** (`docs/design/owner-rulings.md`, A1–A4 below). A1 and
+A2 change code that has landed, so each is a follow-up commit now: A1 first (the tessellator and
+polyline primitives in `catena/src/geometry/curve.rs` and `catena/src/raster/polyline.rs`, with
+the braille canvas's curve and dash primitives rebuilt on them), then A2 in its own commit (G1
+chord cubics, which draw through A1's tessellator). A3 and A4 land with the code they shape (M1
+scene, M3 controller, the radial view). Also confirm CI green on rustc 1.99 for `f61941b`.
 
 Then M0's last harvest: `git mv seed/tests/visual/svg_renderer.rs
 catena-testkit/src/svg.seed.rs` and `seed/tests/visual/snapshots.rs
@@ -127,6 +131,43 @@ run the M0 gate's `verify:` and close M0.
   seed/graph/tree_layout.rs seed/graph/tree_layout_tests.rs seed/fixtures seed/tests/visual)" &&
   test -f CONTRIBUTING.md -a -f TODO.md && grep -q Signed-off-by .github/workflows/*.yml`
 
+## Course correction (owner rulings A1–A4)
+
+Quoted in full in `docs/design/owner-rulings.md`, with a table of the plan text each overrides.
+Each `verify:` lists the named tests first, because a test filter that matches nothing exits 0.
+
+- [ ] **A1 — the sampler is a tessellator** — one `tessellate` turns a quadratic, a cubic or a
+  chain of either into a polyline at the seed's density, `steps = (chord/2).clamp(10, 200)`;
+  solid, dashed and hop-gapped primitives work on polylines; dashes by arc length along the
+  polyline; the seed's dash-phase note is not carried. Tests: invariant E on tessellated
+  polylines; dash and gap lengths within ±1 sub-pixel, including on curves under 20 px.
+  verify: `cargo test -p catena -- --list | grep -c
+  'invariant_e_holds_on_tessellated_curves\|dash_and_gap_lengths_follow_the_pattern' | grep -qx
+  2 && cargo test -p catena && ! grep -rq "counted by sample index" catena/src`
+- [ ] **A2 — chord edges are G1** (own commit, after the chord port `b986741`) — an inter-group
+  edge is the cubics `(src, b_src, J − a·d, J)` and `(J, J + a·d, b_tgt, tgt)`, `J = b_root`,
+  `d = unit(b_tgt − b_src)` or `unit(tgt − src)` when degenerate; the waist arm `a` exposed next
+  to β with a tuned default. Tests: tangent angle at J < 1e-9 rad; collinear at β = 0 with the
+  limit tests green; the C⁰ test replaced, not deleted. verify: `cargo test -p catena -- --list |
+  grep -c 'inter_group_chain_is_g1_at_the_junction\|beta_zero_chain_is_collinear' | grep -qx 2
+  && cargo test -p catena -- chord`
+- [ ] **A3 — room in the scene for shared geometry (M1)** — `Payload` is `#[non_exhaustive]`;
+  each edge has a route, either one `EdgePath` or an ordered chain of segment ids; a segment
+  carries its member `EdgeIx` set and hit-testing it returns that set; invariant B in route
+  terms (every input edge maps to exactly one route, and that route's segments connect its
+  source anchor to its target anchor); the parallel-edge `×n` badge becomes a `CountBadge`
+  decoration any scene item can carry. Open until M1: the name of the per-edge route type, since
+  plan §7.4's `Route` already names the geometry kind (`Polyline | Orthogonal`). verify:
+  `cargo test -p catena -- --list | grep -c 'shared_segment_hit_returns_its_members\|invariant_b_every_edge_has_one_connected_route\|count_badge_rides_any_item'
+  | grep -qx 3 && cargo test -p catena -- scene:: && grep -rq 'non_exhaustive' catena/src/scene`
+- [ ] **A4 — bundling is never the only path (radial view)** — an unbundle toggle (one key sets
+  β = 0) and hover-lift (hovering a node or an edge redraws its edges on `EdgesOver`,
+  highlighted), both in the default key table (M3) and in the T2/T3 goldens once the radial
+  view renders. verify: `cargo test -p catena -- --list | grep -c
+  'unbundle_key_sets_beta_zero\|hover_lift_redraws_incident_edges_over' | grep -qx 2 && cargo
+  test --workspace && cargo insta test --check && test -n "$(git ls-files '*unbundled*')" &&
+  test -n "$(git ls-files '*hover_lift*')"`
+
 ## Owner
 
 - [ ] **Reserve the crate names on crates.io** — a real `0.0.0` publish of `catena`,
@@ -164,7 +205,8 @@ run the M0 gate's `verify:` and close M0.
 
 - [ ] **M1 — Raster + scene** — `Surface`, `CellGrid`, `SubCellCanvas`, four blitters,
   compositor with OR-merge, label mask, clipping, `SceneGraph` with both `Route` kinds, the
-  §7.1 text-cell rule, the SVG renderer ported onto `CellGrid`; T2 goldens, T3 live.
+  §7.1 text-cell rule, the SVG renderer ported onto `CellGrid`; T2 goldens, T3 live; A3's
+  shared-geometry room in the scene.
   verify: `cargo test -p catena raster:: scene:: && cargo insta test && test ! -e
   catena-testkit/src/svg.seed.rs` (plus a committed `.hash` set and a test that perturbs one
   color and watches T3 fail)
@@ -172,12 +214,13 @@ run the M0 gate's `verify:` and close M0.
   verify: `cargo test -p catena` reports ≥ 200 passing tests, the stability suite and the
   cross-run hash test are green, `./scripts/check-perf.sh` exits 0 and wrote this machine's
   baseline entry, `cargo xtask lint` reports zero `lint-allow` lines for the `fmath` rule
-- [ ] **M3 — Interaction + widget + demo** — per plan §19. verify: `cargo test --workspace &&
+- [ ] **M3 — Interaction + widget + demo** — per plan §19, with A4's unbundle key and hover-lift
+  in the default key table. verify: `cargo test --workspace &&
   cargo build -p catena-ratatui --bin catena-demo --features demo && cargo +nightly fuzz run
   fuzz_events -- -runs=10000`
 - [ ] **M4 — Layered engine** — per plan §19. verify: `cargo test -p catena layered:: tree::`
   exits 0, goldens exist for the 12-fixture set, edge conservation passes at 512 cases
 - [ ] **M5 — Polish + package** — per plan §19, including `seed/` removed and `HARVEST_COMPLETE`
-  flipped in `xtask`. verify: `cargo test --workspace --all-features && cargo publish --dry-run
+  flipped in `xtask`, and A4's goldens once the radial view renders. verify: `cargo test --workspace --all-features && cargo publish --dry-run
   -p catena -p catena-ratatui -p catena-testkit && test ! -e seed && test -z "$(git ls-files
   '*.seed.rs')"` (plus the PTY job green on linux and macos, benches within §15.1)
