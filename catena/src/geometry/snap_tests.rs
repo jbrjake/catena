@@ -195,6 +195,33 @@ fn a_large_pan_pushes_nodes_off_screen_without_clamping() {
 }
 
 #[test]
+fn derive_rounds_half_up_so_whole_cells_of_pan_commute() {
+    // Half away from zero would send 1.5 to 2 but -2.5 to -3: a pan of -4 cells would then
+    // move a node by -5.
+    assert_eq!(
+        derive(CellPt::new(1, 1), 1.0, (0.5, -0.5)),
+        CellPt::new(2, 1)
+    );
+    assert_eq!(
+        derive(CellPt::new(1, 1), 1.0, (-3.5, -4.5)),
+        CellPt::new(-2, -3)
+    );
+    for whole in [-7.0, -1.0, 3.0] {
+        let moved = derive(CellPt::new(4, 9), 1.3, (0.5 + whole, 0.5 + whole));
+        let base = derive(CellPt::new(4, 9), 1.3, (0.5, 0.5));
+        assert_eq!(
+            moved,
+            CellPt::new(base.x + to_cells(whole), base.y + to_cells(whole))
+        );
+    }
+}
+
+#[expect(clippy::cast_possible_truncation, reason = "small whole numbers")]
+fn to_cells(v: f64) -> i32 {
+    v as i32
+}
+
+#[test]
 fn derive_scales_about_the_margin() {
     // (c − margin) × zoom / ref_zoom + margin + pan, rounded once (plan §6).
     assert_eq!(

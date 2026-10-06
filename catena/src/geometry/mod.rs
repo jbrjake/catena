@@ -13,6 +13,14 @@ mod metrics;
 mod snap;
 #[cfg(test)]
 pub(crate) mod testing;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "GraphView keeps its viewport once the layout goes live (M2 step 4)"
+    )
+)]
+mod viewport;
 mod zoom;
 
 pub(crate) use metrics::ResolvedMetrics;

@@ -98,11 +98,8 @@ fn last(start: i32, len: u32) -> i32 {
 }
 
 /// Fits the world positions `world` (node centers, by slot) into `grid` at `zoom`, returning
-/// each node's anchor in fractional canonical cells.
-///
-/// At zoom 1 the nodes' centers span the grid less [`MARGIN`] and half the widest and tallest
-/// box on each side, so every box fits; a zoom scales that about the margin, as [`derive`]
-/// does. A world coordinate that is not finite reads as 0.
+/// each node's anchor in fractional canonical cells: [`Transform::of`] then
+/// [`Transform::wanted`].
 pub(crate) fn fit(
     world: &[Option<(f64, f64)>],
     metrics: &ResolvedMetrics,
@@ -110,76 +107,130 @@ pub(crate) fn fit(
     fit: Fit,
     zoom: f64,
 ) -> Vec<Option<SubPt>> {
-    let finite = |v: f64| if v.is_finite() { v } else { 0.0 };
-    let live: Vec<(usize, (f64, f64))> = world
-        .iter()
-        .enumerate()
-        .filter_map(|(slot, p)| {
-            let (x, y) = (*p)?;
-            let ix = NodeIx::new(u32::try_from(slot).ok()?);
-            metrics.form(ix).map(|_| (slot, (finite(x), finite(y))))
-        })
-        .collect();
-    let mut out = vec![None; world.len()];
-    if live.is_empty() {
-        return out;
-    }
+    Transform::of(world, metrics, grid, fit).map_or_else(
+        || vec![None; world.len()],
+        |transform| transform.wanted(world, metrics, zoom),
+    )
+}
 
-    let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
-    let (mut widest, mut tallest) = (0u16, 0u16);
-    for &(slot, (x, y)) in &live {
-        (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
-        if let Some(form) = u32::try_from(slot)
-            .ok()
-            .and_then(|s| metrics.form(NodeIx::new(s)))
-        {
-            widest = widest.max(form.width());
-            tallest = tallest.max(form.height());
+/// How a fit maps world space onto the grid at zoom 1: a world point `(x, y)` lands on column
+/// `left + (x − x0) · sx` and row `top + (y − y0) · sy`, where `sy` includes the cell aspect.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Transform {
+    origin: (f64, f64),
+    scale: (f64, f64),
+    offset: (f64, f64),
+}
+
+impl Transform {
+    /// The fit of the world positions `world` (node centers, by slot) into `grid`; `None`
+    /// when no node has both a position and a form.
+    ///
+    /// The nodes' centers span the grid less [`MARGIN`] and half the widest and tallest box
+    /// on each side, so every box fits. A world coordinate that is not finite reads as 0.
+    pub(crate) fn of(
+        world: &[Option<(f64, f64)>],
+        metrics: &ResolvedMetrics,
+        grid: Grid,
+        fit: Fit,
+    ) -> Option<Transform> {
+        let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+        let (mut widest, mut tallest) = (0u16, 0u16);
+        let mut any = false;
+        for (ix, (x, y)) in live(world, metrics) {
+            any = true;
+            (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+            if let Some(form) = metrics.form(ix) {
+                widest = widest.max(form.width());
+                tallest = tallest.max(form.height());
+            }
         }
-    }
-    let margin = f64::from(MARGIN);
-    let usable =
-        |side: u16, box_side: u16| (f64::from(side) - 2.0 * margin - f64::from(box_side)).max(1.0);
-    let (usable_w, usable_h) = (usable(grid.cols, widest), usable(grid.rows, tallest));
-    let aspect = if grid.cell_aspect > 0.0 && grid.cell_aspect.is_finite() {
-        grid.cell_aspect
-    } else {
-        0.5
-    };
-    // The world's extent in cells at scale 1: columns across, rows down.
-    let (span_x, span_y) = (x1 - x0, (y1 - y0) * aspect);
-    let scale = |usable: f64, span: f64| {
-        if span > 0.0 {
-            usable / span
+        if !any {
+            return None;
+        }
+        let margin = f64::from(MARGIN);
+        let usable = |side: u16, box_side: u16| {
+            (f64::from(side) - 2.0 * margin - f64::from(box_side)).max(1.0)
+        };
+        let (usable_w, usable_h) = (usable(grid.cols, widest), usable(grid.rows, tallest));
+        let aspect = if grid.cell_aspect > 0.0 && grid.cell_aspect.is_finite() {
+            grid.cell_aspect
         } else {
-            f64::INFINITY
-        }
-    };
-    let (sx, sy) = match fit {
-        Fit::Contain => {
-            let s = scale(usable_w, span_x).min(scale(usable_h, span_y));
-            let s = if s.is_finite() { s } else { 0.0 };
-            (s, s)
-        }
-        Fit::Stretch => {
-            let finite_or_zero = |s: f64| if s.is_finite() { s } else { 0.0 };
-            (
+            0.5
+        };
+        // The world's extent in cells at scale 1: columns across, rows down.
+        let (span_x, span_y) = (x1 - x0, (y1 - y0) * aspect);
+        let scale = |usable: f64, span: f64| {
+            if span > 0.0 {
+                usable / span
+            } else {
+                f64::INFINITY
+            }
+        };
+        let finite_or_zero = |s: f64| if s.is_finite() { s } else { 0.0 };
+        let (sx, sy) = match fit {
+            Fit::Contain => {
+                let s = finite_or_zero(scale(usable_w, span_x).min(scale(usable_h, span_y)));
+                (s, s)
+            }
+            Fit::Stretch => (
                 finite_or_zero(scale(usable_w, span_x)),
                 finite_or_zero(scale(usable_h, span_y)),
-            )
-        }
-    };
-    let left = margin + f64::from(widest) / 2.0 + (usable_w - span_x * sx) / 2.0;
-    let top = margin + f64::from(tallest) / 2.0 + (usable_h - span_y * sy) / 2.0;
-    for (slot, (x, y)) in live {
-        let col = left + (x - x0) * sx;
-        let row = top + (y - y0) * aspect * sy;
-        out[slot] = Some(SubPt::new(
+            ),
+        };
+        Some(Transform {
+            origin: (x0, y0),
+            scale: (sx, sy * aspect),
+            offset: (
+                margin + f64::from(widest) / 2.0 + (usable_w - span_x * sx) / 2.0,
+                margin + f64::from(tallest) / 2.0 + (usable_h - span_y * sy) / 2.0,
+            ),
+        })
+    }
+
+    /// Where the world point `(x, y)` lands at `zoom`, in fractional cells: the fit at zoom 1,
+    /// scaled about the margin as [`derive`] scales. A coordinate that is not finite reads as 0.
+    pub(crate) fn place(&self, (x, y): (f64, f64), zoom: f64) -> SubPt {
+        let margin = f64::from(MARGIN);
+        let (x, y) = (finite(x), finite(y));
+        let col = self.offset.0 + (x - self.origin.0) * self.scale.0;
+        let row = self.offset.1 + (y - self.origin.1) * self.scale.1;
+        SubPt::new(
             margin + (col - margin) * zoom,
             margin + (row - margin) * zoom,
-        ));
+        )
     }
-    out
+
+    /// Each node's anchor in fractional canonical cells at `zoom`, by slot: where its center
+    /// in `world` lands.
+    pub(crate) fn wanted(
+        &self,
+        world: &[Option<(f64, f64)>],
+        metrics: &ResolvedMetrics,
+        zoom: f64,
+    ) -> Vec<Option<SubPt>> {
+        let mut out = vec![None; world.len()];
+        for (ix, p) in live(world, metrics) {
+            out[ix.slot()] = Some(self.place(p, zoom));
+        }
+        out
+    }
+}
+
+fn finite(v: f64) -> f64 {
+    if v.is_finite() { v } else { 0.0 }
+}
+
+/// The nodes with both a world position and a form, and their positions made finite.
+fn live<'a>(
+    world: &'a [Option<(f64, f64)>],
+    metrics: &'a ResolvedMetrics,
+) -> impl Iterator<Item = (NodeIx, (f64, f64))> + 'a {
+    world.iter().enumerate().filter_map(|(slot, p)| {
+        let (x, y) = (*p)?;
+        let ix = NodeIx::new(u32::try_from(slot).ok()?);
+        metrics.form(ix).map(|_| (ix, (finite(x), finite(y))))
+    })
 }
 
 /// Rounds each wanted anchor (by slot) to a cell and resolves collisions, placing the nodes in
@@ -225,11 +276,24 @@ pub(crate) fn resolve(
 }
 
 /// The cell a canonical cell is drawn at (plan §6): `(c − margin) × ratio + margin + pan`,
-/// with `ratio` the zoom over the zoom the snap ran at, rounded once.
+/// with `ratio` the zoom over the zoom the snap ran at, rounded once, half up.
+///
+/// Half up, `⌊v + ½⌋`, because it commutes with whole cells: a pan grown by `d` whole cells
+/// moves every derived cell by exactly `d`, which is what lets anchor compensation and the
+/// zoom-out re-snap leave a node exactly where it was drawn.
 pub(crate) fn derive(canonical: CellPt, ratio: f64, pan: (f64, f64)) -> CellPt {
     let margin = f64::from(MARGIN);
-    let axis = |c: i32, pan: f64| (f64::from(c) - margin) * ratio + margin + pan;
-    SubPt::new(axis(canonical.x, pan.0), axis(canonical.y, pan.1)).cell()
+    let axis = |c: i32, pan: f64| half_up((f64::from(c) - margin) * ratio + margin + pan);
+    CellPt::new(axis(canonical.x, pan.0), axis(canonical.y, pan.1))
+}
+
+/// `⌊v + ½⌋`, saturating to the `i32` range, NaN to 0.
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "the float-to-int cast saturates, and NaN becomes 0"
+)]
+pub(crate) fn half_up(v: f64) -> i32 {
+    (v + 0.5).floor() as i32
 }
 
 /// The order a snap places nodes in: pinned nodes first, then by degree, most first (hubs

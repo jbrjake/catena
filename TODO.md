@@ -33,9 +33,9 @@ M2 in this order, each step green on its own:
    yet, so its modules carry `expect(dead_code)`.
 4. `GridSnapper` and the viewport (plan §6): ~~isotropic `Fit::Contain`, `cell_aspect` once,
    the 50-ring spiral, the enforced 2-row gap~~ (landed as `geometry::snap`: `fit`, `resolve`,
-   `derive`, `placement_order`; invariants A and I), then the canonical/derived split as
+   `derive`, `placement_order`; invariants A and I), ~~the canonical/derived split as
    viewport state (`f64` pan and zoom, `ref_zoom`), zoom-out re-snap and anchor compensation
-   with invariant G. With it the layout goes live: `GraphView` holds the viewport (a
+   with invariant G~~ (landed as `geometry::viewport`). Left: the layout goes live: `GraphView` holds the viewport (a
    default size until the first render, to be decided), the world positions and `ForceParams`
    (the builder's `layout(LayoutKind::Force(..))`), runs `lay_out` synchronously at the end of
    a `Topology` `update` (plan §4.2), places `repinned` nodes at their pins, and lets the
@@ -71,6 +71,25 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
   and overlaps (`Snap::overlapping`); every node moved off its rounded fit cell is in
   `Snap::displaced`, which plan §6's re-snap cascade counts. Claimed cells sit in a hash set
   with a fixed hasher, only ever asked about, so nothing random reaches the output.
+- **M2 step 4: the viewport derives half up, and moves canonical cells three ways.** `derive`
+  rounds `⌊v + ½⌋`, not half away from zero, because only that commutes with whole cells: a
+  pan grown by `d` cells moves every drawn cell by exactly `d`. So anchor compensation, which
+  moves the pan by whole cells after a refit, keeps the focused node exactly where it was
+  drawn (invariant G asks within 3 cells), and the zoom-out re-snap leaves every node that does
+  not move exactly where it was drawn. A refit fits a new layout afresh at the current zoom,
+  which becomes `ref_zoom`. A re-snap, after boxes or pins change, keeps the last refit's
+  transform: the changed nodes go where it puts them, every other node starts from its cell,
+  and what a changed box pushes is the cascade plan §4.2 counts (`Snap::displaced`). The
+  focused node is the host's (M3's controller); with none, nothing is compensated, as in the
+  seed.
+- **M2 step 4: the zoom-out re-snap runs when drawn boxes meet, not only after a displacing
+  snap.** Plan §6 re-snaps "on a zoom-out frame where the last snap displaced anything", but
+  within one semantic level boxes keep their width while spacing shrinks with the zoom, so
+  nodes no snap ever displaced meet too: level 2 spans zooms 0.35 to 1.5, and two 14-column
+  boxes 20 columns apart at zoom 1 overlap at 0.5. On a zoom below `ref_zoom` the drawn cells
+  are resolved again; if nothing has to move nothing changes, so this moves no more than plan
+  §11.2 allows ("only nodes that would otherwise overlap"). It costs one resolve per zoom-out
+  frame, O(n × box cells). Unratified, since it departs from plan §6's wording.
 - **M2 step 3: `layout_fr.rs` splits three ways.** Its FR core is ported in
   `layout/force/simulation.rs`, a rewrite of the loop, so `git show -M20%` pairs the staged seed
   with `ring.seed.rs`, its largest verbatim slice, and shows the simulation as new.
