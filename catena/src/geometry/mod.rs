@@ -1,5 +1,6 @@
 //! Geometry: curves, node measurement, grid snapping and the viewport (plan §5, §6).
 
+pub mod cell;
 pub mod curve;
 
 #[cfg_attr(

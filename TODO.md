@@ -9,10 +9,8 @@ to exit 0. Milestones and their gates come from plan §19.
 `CellGrid`; T3 live; `SubCellCanvas` and the four blitters). Step 4 lands in this order, each
 green on its own:
 
-1. Scene types in `catena/src/scene/`: `SceneGraph`, `SceneItem`, `Layer`, `Payload`
-   (`#[non_exhaustive]`), both `Route` kinds, the per-edge route (one path or a chain of shared
-   segment ids, each segment carrying its `EdgeIx` set), `CountBadge`; A3's hit-test of a shared
-   segment and invariant B in route terms.
+1. ~~Scene types~~ (done): `SceneGraph`, `SceneItem`, `Layer`, `Payload`, both `Route` kinds,
+   `EdgeRoute`, shared segments, `CountBadge`, `edges_at` and `route_faults`.
 2. Cohen–Sutherland clipping of segments to the canvas before the walk, keeping dash phase,
    which closes "Bound the work of a huge segment".
 3. The compositor: one canvas per layer, OR-merged with the topmost layer's color; `Orthogonal`
@@ -89,6 +87,35 @@ block the work.
   renderer passes the configured one rather than a second constant. Horizontal with vertical, or
   any mix with a diagonal, is `cross`; the two diagonals are `diagonal_cross`. `LineGlyphs::BOX`
   and `LineGlyphs::ASCII` are the two sets until §12's `GlyphSet` carries them.
+- **M1: `NodeIx` and `EdgeIx` arrive with the scene,** in a `graph` module that the M2 store
+  fills in: opaque `u32`s, as plan §4.1 has them, made only inside the crate. So scenes are
+  built by `catena`'s own unit tests until a layout emits them, and the scene's T2 goldens are
+  unit-test `insta` snapshots. T3 scene snapshots wait for `GraphView` (M2): a unit test cannot
+  hand its `CellGrid` to the testkit's copy of `catena` (the dev-dependency cycle above), and M1's
+  T3 requirement (a committed set, a perturbed-color failure) is met by the testkit's own set.
+- **A3: the per-edge route is `EdgeRoute { Path(Route), Chain(Vec<SegmentId>) }`,** which settles
+  the open name: plan §7.4's `Route` stays the geometry kind. `Payload::EdgePath { ix, route:
+  EdgeRoute }` keeps its plan name; a chained edge draws nothing itself, and each shared segment
+  is its own item, `Payload::Segment { id, route, members }`, drawn once. `SceneGraph::push`
+  assigns segment ids and sorts and dedups members, so a scene cannot hold a stale id or an
+  unsorted set. `CountBadge { count, at }` is a field of `SceneItem`, so any item can carry one,
+  placed by the producer inside the item's bounds.
+- **A3: invariant B is `scene::route_faults`,** returning every fault (missing, duplicate,
+  unexpected, disconnected, unknown segment, not a member, stray member) rather than a bool, so a
+  failing property names the edge. A path must start in its source anchor's cell and end in its
+  target's; a chain is walked from the source and each segment may run either way, since a shared
+  trunk serves edges going both ways.
+- **M1: `Payload` starts with `NodeBox`, `EdgePath`, `Segment` and `Decoration(Glow)`.** Plan
+  §7.4's `Junction{..}` and `Label{..}` arrive with their producers (the layered engine; node
+  measurement), which `#[non_exhaustive]` allows without a break. Hit priority is the plan's
+  §10.2 (topmost layer, then smallest bounds) with insertion order standing in for the §4.1 sort
+  tuple, since layouts push items in that order.
+- **M1: a `SubPt` lies in the cell it rounds to, in every blitter.** The compositor maps a point
+  to sub-pixels as `x·SUB_W + (SUB_W−1)/2`, `y·SUB_H + (SUB_H−1)/2`: plan §6's `+SUB_H/2`,
+  generalized to both axes. For integer rows it gives the plan's pixel in all four blitters; for
+  columns it picks braille's right dot column instead of the left. In return a route's cells are
+  its vertices' cells rounded, so `Route::bounds` is exact and invariant B compares anchors
+  exactly.
 - **M1: the sextant table is checked against Unicode's character names,** a 60-entry table
   generated from the Unicode 15.1 database (`BLOCK SEXTANT-<cells>`), not against the encoder's
   own arithmetic; `▌`, `▐`, `█` and a space fill the four patterns Unicode encodes elsewhere.

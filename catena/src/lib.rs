@@ -13,5 +13,7 @@
 )]
 mod fmath;
 pub mod geometry;
+pub mod graph;
 mod layout;
 pub mod raster;
+pub mod scene;
