@@ -5,7 +5,25 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-M0 step 4, last harvest: `git mv seed/tests/visual/svg_renderer.rs
+**CI is red; fix it first.** CI's `stable` moved to rustc 1.99, whose clippy fails the gate where
+1.97 (this container's default) passes. CI run 37498710454 failed `explicit_iter_loop` in
+`quadtree.rs`, now fixed. `cargo +1.99 clippy --workspace --all-targets --all-features
+--keep-going -- -D warnings` still reports eight sites (1.99 is installed here as a rustup
+toolchain):
+
+- `clippy::assert_is_empty` (new in 1.99), six sites: `catena/src/layout/layered/flex_tests.rs`
+  (two), `catena/src/raster/text_tests.rs` (two), `catena/tests/catena/raster.rs`,
+  `catena-testkit/tests/catena_testkit/fixtures.rs`.
+- `unfulfilled_lint_expectations`, two sites: the `expect(clippy::float_cmp)` in
+  `catena/src/fmath.rs` and `catena/src/layout/force/quadtree_tests.rs`, which 1.99's
+  `float_cmp` no longer fires on. Use `allow` with the same reason for clippy-lint scopes, since
+  clippy changes across releases.
+
+Decide with the owner whether CI should pin its toolchain (a gate that moves under you is not
+deterministic) or keep `stable` per plan §17 and fix lints as they arrive. Fix the sites either
+way, then confirm green on all three `check` legs.
+
+Then M0's last harvest: `git mv seed/tests/visual/svg_renderer.rs
 catena-testkit/src/svg.seed.rs` and `seed/tests/visual/snapshots.rs
 catena-testkit/src/svg_snapshots.seed.rs` (one commit, no content change; ported at M1). Then
 run the M0 gate's `verify:` and close M0.

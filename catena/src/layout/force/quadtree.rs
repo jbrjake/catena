@@ -282,7 +282,7 @@ impl QuadTree {
         // Cell too close — recurse into children for accuracy.
         let mut fx = 0.0;
         let mut fy = 0.0;
-        for child in children.iter() {
+        for child in &**children {
             let (cfx, cfy) = child.compute_force(x, y, theta, k);
             fx += cfx;
             fy += cfy;
