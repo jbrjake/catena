@@ -2,4 +2,5 @@
 //! isotropic `f64` world space and knows nothing about cell shape (plan §6).
 
 pub(crate) mod force;
+pub(crate) mod layered;
 pub(crate) mod radial;

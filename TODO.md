@@ -5,12 +5,12 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-M0 step 4, flex: `git mv seed/ui/flex_layout.rs catena/src/layout/layered/flex.seed.rs`
-(commit 1), then port (commit 2) as `flex.rs`: correct the overflow comment (the first item that
-no longer fits the remainder gets it, later items get zero — red first: a test pinning that
-with the overflow in the middle item), keep all seed tests, and add invariant L (plan §16.2) as
-a property test over random item sets checked against a slow oracle. `proptest` enters the
-workspace as a dev-dependency here.
+M0 step 4, `word_wrap`: copy `seed/ui/box_layout.rs` and `box_layout_tests.rs` to
+`catena/src/raster/text.seed.rs` and `text_tests.seed.rs` (commit 1, see Decisions: the seed
+files stay), then port (commit 2) to `text.rs` keeping only `word_wrap` and its nine tests, in
+display columns via `unicode-width` (enters `catena`'s dependencies here), with the §18
+semantics and the Decisions' details. Red first: CJK/emoji/combining-mark cases and `\n`
+paragraphs fail on the seed's `chars().count()` version; add an every-line-fits property.
 
 ## Decisions
 
@@ -54,6 +54,9 @@ workspace as a dev-dependency here.
 - **A port that rewrites most of a file needs `-M20%` to show as a rename.** The braille port
   fell under git's default 50% similarity; `git show -M20% <port commit>` pairs it with its
   staged seed file, so the delta from the seed stays reviewable.
+- **Property tests run proptest at a fixed seed with failure persistence off.** The gates are
+  deterministic (plan §17), so every run draws the same 256 cases; a failure reproduces as-is,
+  and a case worth keeping becomes a named regression test rather than a file under `src/`.
 - **`chord` renames `entity` to `node` as well as `community` to `group`.** Plan §2.2 rules out
   domain vocabulary; the rest of the plan calls them nodes.
 - **`cargo xtask lint` details the plan leaves open.** Matching runs on source with comments and
@@ -100,7 +103,7 @@ workspace as a dev-dependency here.
   seed/graph/chord_tests.rs)"`
 - [x] **Harvest the zoom table** → `catena/src/geometry/`, configurable, with the clamp constants.
   verify: `cargo test -p catena zoom && test -z "$(git ls-files seed/graph/zoom.rs)"`
-- [ ] **Harvest flex** → `catena/src/layout/layered/flex.rs`, overflow comment corrected and
+- [x] **Harvest flex** → `catena/src/layout/layered/flex.rs`, overflow comment corrected and
   pinned. verify: `cargo test -p catena flex && test -z "$(git ls-files seed/ui/flex_layout.rs)"`
 - [ ] **Harvest `word_wrap`** → `catena/src/raster/text.rs`, in display columns with the §18
   semantics. verify: `cargo test -p catena text`
