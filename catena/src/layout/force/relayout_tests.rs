@@ -199,19 +199,7 @@ fn a_level_change_moves_only_nodes_near_reshaped_ones() {
     let mut state = first(&store, &metrics, FRAME);
     let before = state.positions.clone();
 
-    let forms: Vec<_> = store
-        .nodes_in_order()
-        .iter()
-        .map(|&ix| metrics.form(ix).cloned())
-        .collect();
-    assert!(metrics.set_level(&store, at(5)));
-    let reshaped: BTreeSet<NodeIx> = store
-        .nodes_in_order()
-        .iter()
-        .zip(&forms)
-        .filter(|&(&ix, form)| metrics.form(ix) != form.as_ref())
-        .map(|(&ix, _)| ix)
-        .collect();
+    let reshaped = metrics.set_level(&store, at(5));
     let wide = ix(&store, "g22");
     assert_eq!(reshaped.iter().collect::<Vec<_>>(), [&wide]);
     lay_out(
@@ -219,7 +207,7 @@ fn a_level_change_moves_only_nodes_near_reshaped_ones() {
         &store,
         &metrics,
         FRAME,
-        Change::Level(&reshaped),
+        Change::Reshaped(&reshaped),
         &mut state,
     );
 

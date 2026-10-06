@@ -191,20 +191,12 @@ impl<K: Key> GraphStore<K> {
     }
 
     /// Live nodes in canonical order: by sort key, then key.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the force layout (M2) iterates in this order")
-    )]
     pub(crate) fn nodes_in_order(&self) -> &[NodeIx] {
         &self.order.nodes
     }
 
     /// Live edges in canonical order: by the places of their lower and higher end in node
     /// order, then insertion.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the force layout (M2) iterates in this order")
-    )]
     pub(crate) fn edges_in_order(&self) -> &[EdgeIx] {
         &self.order.edges
     }

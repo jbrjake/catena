@@ -10,14 +10,20 @@
 /// `seed/app/navigation.rs`).
 #[cfg_attr(
     not(test),
-    expect(dead_code, reason = "the viewport (M2 step 4) clamps to it")
+    expect(
+        dead_code,
+        reason = "the viewport clamps to it; the controller (M3) is the first to zoom"
+    )
 )]
 pub(crate) const MIN_ZOOM: f64 = 0.1;
 
 /// The largest zoom the controller allows (the seed's `zoom_in` clamp).
 #[cfg_attr(
     not(test),
-    expect(dead_code, reason = "the viewport (M2 step 4) clamps to it")
+    expect(
+        dead_code,
+        reason = "the viewport clamps to it; the controller (M3) is the first to zoom"
+    )
 )]
 pub(crate) const MAX_ZOOM: f64 = 4.0;
 
@@ -75,7 +81,10 @@ impl SemanticZoomTable {
     /// more detail must not be narrower than the one below it.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "the builder (M2 step 4) takes a custom table")
+        expect(
+            dead_code,
+            reason = "the builder's semantic zoom option lands with zoom input (M3)"
+        )
     )]
     pub(crate) fn new(upper: [f64; 5], caps: [u16; 5]) -> Option<Self> {
         let ceilings_ok =

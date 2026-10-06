@@ -355,17 +355,25 @@ fn metrics_measure_every_live_node_at_their_level() {
     assert_eq!(width_of(&metrics, &store, "a"), Some(5));
     assert_eq!(width_of(&metrics, &store, "b"), Some(14));
 
-    assert!(
-        metrics.set_level(&store, at(5)),
-        "a new level measures again"
+    let b = store.ix_of(&"b").expect("live");
+    assert_eq!(
+        metrics
+            .set_level(&store, at(5))
+            .into_iter()
+            .collect::<Vec<_>>(),
+        [b],
+        "a new level measures again, and only b's box grows"
     );
     assert_eq!(width_of(&metrics, &store, "b"), Some(17));
+    assert_eq!(width_of(&metrics, &store, "a"), Some(5));
     assert!(
-        !metrics.set_level(&store, at(5)),
+        metrics.set_level(&store, at(5)).is_empty(),
         "the same level is no change"
     );
     assert!(
-        !metrics.set_level(&store, SemanticZoomTable::default().level(3.9)),
+        metrics
+            .set_level(&store, SemanticZoomTable::default().level(3.9))
+            .is_empty(),
         "another zoom in the same level is no change"
     );
 }

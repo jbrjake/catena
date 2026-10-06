@@ -15,3 +15,18 @@ pub(crate) mod tree;
 pub(crate) fn count(n: usize) -> f64 {
     n as f64
 }
+
+/// Which layout engine places the nodes (plan §13).
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum LayoutKind {
+    /// Force-directed (plan §8).
+    Force(force::ForceParams),
+}
+
+impl Default for LayoutKind {
+    /// Force-directed, with [`ForceParams::default`](force::ForceParams::default).
+    fn default() -> Self {
+        LayoutKind::Force(force::ForceParams::default())
+    }
+}

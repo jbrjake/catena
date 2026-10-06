@@ -1,8 +1,8 @@
 //! How far a relayout reaches (the owner's "Relayout" ruling, `docs/design/owner-rulings.md`):
 //! where each node starts, and how freely it may move.
 //!
-//! A topology change or a semantic level change reaches `tether_reach` hops along layout edges
-//! from what changed. Within reach a node moves as its forces say, tethered to where it was:
+//! A topology change, or boxes that collapsed or expanded, reach `tether_reach` hops along
+//! layout edges from what changed. Within reach a node moves as its forces say, tethered to where it was:
 //! loosely (`tether_near`) up to one hop out, so it answers the change, then more firmly, up to
 //! `tether_far` at the reach. Beyond reach a node holds its place, still pushing and pulling.
 //! This is mobility fading with graph distance from a change, the online dynamic-graph
@@ -14,7 +14,8 @@
 //! What changed: after a topology change, a node new to the layout (hop 0; one that had no
 //! layout edge and now has counts as new, since its ring place says nothing about where it
 //! belongs) and every node that gained or lost a layout neighbor (hop 1, next to the change);
-//! after a level change, the nodes whose boxes changed (hop 0). After a resize every node is
+//! after boxes change (at a semantic level change, or an edit that pushed too many nodes
+//! aside), the nodes whose boxes changed (hop 0). After a resize every node is
 //! free and nothing is tethered, and the layout scales by the change in the ideal distance
 //! before it relaxes, which is its equilibrium when every force scales with distance alike.
 
@@ -110,7 +111,7 @@ pub(super) fn starts(
                 }
             }
         }
-        Change::Level(reshaped) => {
+        Change::Reshaped(reshaped) => {
             for (i, ix) in view.order.iter().enumerate() {
                 if reshaped.contains(ix) {
                     sources[i] = Some(0);

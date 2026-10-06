@@ -9,7 +9,7 @@
 //! Every other node goes to the peripheral ring (plan §8.2).
 //!
 //! A relayout follows one [`Change`] (the owner's "Relayout" ruling). After a topology change
-//! or a semantic level change, it reaches `tether_reach` hops from what changed: the nodes
+//! or a change of boxes, it reaches `tether_reach` hops from what changed: the nodes
 //! within reach move as their forces say, each tethered to where it was, loosely next to the
 //! change and firmly at the edge of the reach, and every node beyond holds its place (see
 //! [`mobility`]). After a resize every node is free, and islands and ring are placed afresh.
@@ -48,8 +48,9 @@ pub(crate) enum Change<'a> {
     /// Nodes or edges came or went, and these slots hold nodes new to the layout. A first
     /// layout is one whose every node is new.
     Topology(&'a BTreeSet<NodeIx>),
-    /// The semantic zoom level changed, and these nodes' boxes collapsed or expanded with it.
-    Level(&'a BTreeSet<NodeIx>),
+    /// These nodes' boxes collapsed or expanded: at a semantic zoom level change, or after an
+    /// edit whose re-snap pushed too many nodes aside (plan §4.2).
+    Reshaped(&'a BTreeSet<NodeIx>),
     /// The frame changed size.
     Resize,
 }

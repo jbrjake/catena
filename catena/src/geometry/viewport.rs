@@ -61,11 +61,13 @@ impl Viewport {
     }
 
     /// The zoom the canonical snap ran at.
+    #[cfg(test)]
     pub(crate) fn ref_zoom(&self) -> f64 {
         self.ref_zoom
     }
 
     /// The canonical snap.
+    #[cfg(test)]
     pub(crate) fn canonical(&self) -> &Snap {
         &self.snap
     }
@@ -77,6 +79,10 @@ impl Viewport {
     }
 
     /// Every placed node's box as drawn now.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "the scene (M2 step 5) draws these boxes")
+    )]
     pub(crate) fn boxes<'a>(
         &'a self,
         metrics: &'a ResolvedMetrics,

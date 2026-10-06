@@ -5,19 +5,19 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**M2 (graph model + force layout + viewport, plan §19) is under way: steps 1 to 3, the graph
-store, `ResolvedMetrics` and the force layout, and the relayout rework the owner ruled on are
-done (`## M2` below). Next is step 4, the snapper and viewport, which puts the layout live.**
+**M2 (graph model + force layout + viewport, plan §19) is under way: steps 1 to 4, the graph
+store, `ResolvedMetrics`, the force layout with the relayout rework the owner ruled on, and
+the snapper and viewport, are done (`## M2` below), so `update` now lays out and snaps. Next is
+step 5: draw it, layout → `SceneGraph` → `render_to_string`.**
 
-What step 4 inherits from the rework: `lay_out` follows a `Change`. `GraphView` keeps one
-`ForceState` and passes `Change::Topology(&pending.added)` after a `Topology` update,
-`Change::Level(&reshaped)` when the semantic level changes, and `Change::Resize` when the
-viewport does. `ResolvedMetrics::set_level` returns only whether the level changed; it must
-return the nodes whose box changed, as `apply` does for a commit. Invariant F is measured on
-world positions at the later layout's `Fit::Contain` scale; once the snapper exists, read it
-again on snapped cells, since a refit after a node lands outside the old bounding box moves
-every cell (anchor compensation, plan §6, holds only the focused node). Unratified choices
-the rework made are flagged under `## Decisions` for the owner.
+What step 5 inherits: `GraphView::cell(ix)` is where a node's anchor is drawn and
+`Viewport::boxes` every node's drawn box (both waiting on the scene, `expect(dead_code)`);
+`GraphView::resize(cols, rows)` is what a render at its area calls first, a full relayout when
+the size changed, since until the first render a view lays out for 80 × 24. Invariant F is
+measured on world positions at the later layout's `Fit::Contain` scale; with the snapper live,
+read it again on drawn cells, since a refit after a node lands outside the old bounding box
+moves every cell (anchor compensation, plan §6, holds only the focused node, and there is none
+until M3's controller). Unratified choices are flagged under `## Decisions` for the owner.
 
 M2 in this order, each step green on its own:
 
@@ -31,17 +31,11 @@ M2 in this order, each step green on its own:
    `layout::force::engine::lay_out(params, store, metrics, Frame { area, cell_aspect }, change,
    &mut ForceState)`, world positions (node centers) by slot. Nothing calls it outside tests
    yet, so its modules carry `expect(dead_code)`.
-4. `GridSnapper` and the viewport (plan §6): ~~isotropic `Fit::Contain`, `cell_aspect` once,
-   the 50-ring spiral, the enforced 2-row gap~~ (landed as `geometry::snap`: `fit`, `resolve`,
-   `derive`, `placement_order`; invariants A and I), ~~the canonical/derived split as
-   viewport state (`f64` pan and zoom, `ref_zoom`), zoom-out re-snap and anchor compensation
-   with invariant G~~ (landed as `geometry::viewport`). Left: the layout goes live: `GraphView` holds the viewport (a
-   default size until the first render, to be decided), the world positions and `ForceParams`
-   (the builder's `layout(LayoutKind::Force(..))`), runs `lay_out` synchronously at the end of
-   a `Topology` `update` (plan §4.2), places `repinned` nodes at their pins, and lets the
-   snapper consume `reshaped` and `repinned`, clearing `pending`. A level change and a resize
-   relayout through their `Change` (above). `simulation::Run` takes one step at a time, which
-   is what `LayoutPacing::Animated` needs once `tick` exists.
+4. ~~`GridSnapper` and the viewport~~ (plan §6): landed as `geometry::snap` (`fit`,
+   `resolve`, `derive`, `placement_order`) and `geometry::viewport` (the canonical/derived
+   split, zoom-out re-snap, anchor compensation), and `GraphView` lays out and snaps at the end
+   of every `update`. `simulation::Run` takes one step at a time, which is what
+   `LayoutPacing::Animated` needs once `tick` exists.
 5. Layout → `SceneGraph` → `render_to_string`; T3 scene snapshots; the T4 tier with the
    `catena-render-hash` bin and committed hashes; invariants B–E and N on real scenes.
 6. The zero-allocation frame test, the first criterion bench, `scripts/check-perf.sh` with
@@ -51,6 +45,21 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
 
 ## Decisions
 
+- **M2 step 4: `GraphView` catches up at the end of every `update`** (plan §4.2's synchronous
+  pacing), consuming `pending`: a `Topology` commit relayouts (`Change::Topology` with the
+  absorbed `added`) and refits; a `Geometry` commit puts each repinned node's world position
+  at its pin and re-snaps the reshaped and repinned nodes, and if that pushes more than 8 nodes
+  aside, relayouts around them (`Change::Reshaped`, the same reach a level change has) and
+  refits; a `Property` commit moves nothing. A zoom that crosses a semantic level remeasures
+  (`ResolvedMetrics::set_level` now returns the nodes whose box changed size) and relayouts
+  around those; a zoom within a level only re-snaps on the way out. A resize relayouts in
+  full. Until the first render a view lays out for an 80 × 24 viewport, so a first render at
+  another size is a resize: one more layout, rather than a public size option nobody asked
+  for. The builder gains `layout(LayoutKind)`, `fit(Fit)` and `cell_aspect(f64)`
+  (`DEFAULT_CELL_ASPECT` 0.5; an aspect that is not finite and positive keeps it); `Fit` and
+  `LayoutKind` are public and `#[non_exhaustive]`. Known gap: a commit that both changes the
+  topology and reshapes a box relayouts by topology alone, so the reshaped node is not a source
+  of the reach.
 - **M2 step 4: the snapper's fit (plan §6).** At zoom 1 the nodes' centers span the grid less
   a one-cell margin and half the widest and tallest box at each edge, so every box fits.
   `Fit::Contain` takes the smaller of the two axis scales (columns per world unit across, rows
@@ -665,6 +674,16 @@ Plan §19, in the six steps of `## Now`, each green on its own. The milestone cl
   verify: `cargo test -p catena -- --list | grep -c
   'new_nodes_lead_their_neighbors_to_be_reassessed\|a_level_change_moves_only_nodes_near_reshaped_ones\|a_resize_relays_out_every_node'
   | grep -qx 3 && cargo test -p catena -- layout::force && ! grep -rn "settle" catena/src/layout/force/simulation.rs`
+- [x] **Step 4: the snapper and viewport** — `geometry/snap{,_tests}.seed.rs` ported by the
+  §18 procedure: isotropic `Fit::Contain` (`Fit::Stretch` opt-in), `cell_aspect` applied once,
+  one 50-ring spiral, the enforced 2-row gap, off-screen nodes resolved (ledger rows 7, 9,
+  28); the viewport's canonical/derived split with `f64` pan and zoom, zoom-out re-snap and
+  anchor compensation; `GraphView` lays out after a topology commit, re-snaps after a geometry
+  commit (relayout past 8 pushed), relayouts around reshaped boxes at a level change and in
+  full at a resize; invariants A, G and I. verify: `cargo test -p catena -- --list | grep -c
+  'invariant_a_no_two_boxes_intersect\|invariant_g_a_relayout_keeps_the_focused_node_where_it_is_drawn\|invariant_i_derived_at_the_snap_zoom_with_no_pan_is_canonical\|an_edit_that_pushes_more_than_eight_nodes_aside_relays_out\|crossing_a_semantic_level_relays_out_around_the_reshaped_nodes\|a_crowding_zoom_out_moves_only_the_nodes_that_meet'
+  | grep -qx 6 && cargo test -p catena -- geometry:: view:: && test -z "$(git ls-files
+  catena/src/geometry/snap.seed.rs catena/src/geometry/snap_tests.seed.rs)"`
 
 ## Course correction (owner rulings A1–A4)
 
@@ -747,10 +766,11 @@ Each `verify:` lists the named tests first, because a test filter that matches n
   an `allow` (rustc 1.88 does not report it, 1.97 does). Each goes when its engine lands (M2,
   M4, M5); the `expect`s announce themselves, the `fmath` `allow` will not. M2 step 2 removed
   `raster::text`'s and narrowed `geometry::zoom`'s to `MIN_ZOOM`, `MAX_ZOOM` and
-  `SemanticZoomTable::new` (step 4), with `ResolvedMetrics::{level, form, set_level}` waiting on
-  steps 3 to 5. M2 step 3 moved the quadtree's onto `layout::force`'s `engine`, `mobility`,
-  `ring` and `simulation` modules, which go live with step 4's wiring, as does
-  `geometry::snap`.
+  `SemanticZoomTable::new`. M2 step 4 put the force layout, the snapper and the viewport live,
+  removing their modules' expectations and `fmath`'s `allow` (nothing there is dead now, on
+  any rustc); what waits is item by item: `GraphView::{cell, resize}` and the box accessors on
+  step 5, `GraphView::{pan_by, zoom_about}`, the zoom clamps and `Snap::bounds` on M3, and the
+  layered, tree and radial modules on M4 and M5.
   verify: `! grep -rn "dead_code" catena/src`
 
 - [ ] **Fit the islands and the ring to the frame (needs the owner: plan §8.2)** — the

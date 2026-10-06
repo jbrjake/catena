@@ -42,9 +42,10 @@ pub(crate) struct Grid {
     pub(crate) cell_aspect: f64,
 }
 
-/// How the world maps onto the grid (plan §6).
+/// How the layout's world space maps onto the viewport's cells (plan §6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) enum Fit {
+#[non_exhaustive]
+pub enum Fit {
     /// One scale for both axes, the largest that shows every node, centered: the layout's
     /// distances survive, and the slack axis is letterboxed.
     #[default]
@@ -68,6 +69,10 @@ pub(crate) struct Snap {
 
 impl Snap {
     /// Each placed node's box: its form's size, around its anchor.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "the scene (M2 step 5) draws the viewport's boxes")
+    )]
     pub(crate) fn boxes<'a>(
         &'a self,
         metrics: &'a ResolvedMetrics,
@@ -83,6 +88,10 @@ impl Snap {
     }
 
     /// The box around every node's box; `None` with no node placed.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "the minimap (M3) frames the whole graph")
+    )]
     pub(crate) fn bounds(&self, metrics: &ResolvedMetrics) -> Option<CellBox> {
         CellBox::around(self.boxes(metrics).flat_map(|(_, b)| {
             let far = CellPt::new(last(b.x, b.width), last(b.y, b.height));
@@ -100,6 +109,7 @@ fn last(start: i32, len: u32) -> i32 {
 /// Fits the world positions `world` (node centers, by slot) into `grid` at `zoom`, returning
 /// each node's anchor in fractional canonical cells: [`Transform::of`] then
 /// [`Transform::wanted`].
+#[cfg(test)]
 pub(crate) fn fit(
     world: &[Option<(f64, f64)>],
     metrics: &ResolvedMetrics,
@@ -382,3 +392,7 @@ impl Taken {
 #[cfg(test)]
 #[path = "snap_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "snap_fit_tests.rs"]
+mod fit_tests;

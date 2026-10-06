@@ -22,6 +22,8 @@
 //! is drawn (invariant N). They depend only on character widths and on where the whitespace is,
 //! so a label edit the store classes as a property change (`same_layout`) never changes a box.
 
+use std::collections::BTreeSet;
+
 use super::cell::CellPt;
 use super::zoom::{SemanticZoom, SemanticZoomTable};
 use crate::graph::{Delta, GraphStore, Key, NodeIx, NodeShape, NodeSpec};
@@ -260,25 +262,12 @@ impl ResolvedMetrics {
     }
 
     /// The level every form is measured at.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the viewport (M2 step 4) reads and moves the level"
-        )
-    )]
+    #[cfg(test)]
     pub(crate) fn level(&self) -> SemanticZoom {
         self.zoom_level
     }
 
     /// The form of the node at `ix`, or `None` for a vacant slot.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "layout, snapping and rendering (M2 steps 3 to 5) read it"
-        )
-    )]
     pub(crate) fn form(&self, ix: NodeIx) -> Option<&NodeForm> {
         self.forms.get(ix.slot())?.as_ref()
     }
@@ -295,19 +284,37 @@ impl ResolvedMetrics {
         );
     }
 
-    /// Moves to `level`, measuring every node again if that is a new level. Returns whether it
-    /// was, since boxes may then have changed (plan §6: a level transition relayouts warm).
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the viewport (M2 step 4) moves the level on zoom")
-    )]
-    pub(crate) fn set_level<K: Key>(&mut self, store: &GraphStore<K>, level: SemanticZoom) -> bool {
+    /// The level a zoom selects in this table.
+    pub(crate) fn level_at(&self, zoom: f64) -> SemanticZoom {
+        self.table.level(zoom)
+    }
+
+    /// Moves to `level`, measuring every node again if that is a new level. Returns the nodes
+    /// whose box changed size, which a level change relayouts around (owner, "Relayout"); none
+    /// at the same level.
+    pub(crate) fn set_level<K: Key>(
+        &mut self,
+        store: &GraphStore<K>,
+        level: SemanticZoom,
+    ) -> BTreeSet<NodeIx> {
         if level == self.zoom_level {
-            return false;
+            return BTreeSet::new();
         }
+        let sizes: Vec<Option<(u16, u16)>> = self
+            .forms
+            .iter()
+            .map(|f| f.as_ref().map(NodeForm::size))
+            .collect();
         self.zoom_level = level;
         self.measure_all(store);
-        true
+        self.forms
+            .iter()
+            .enumerate()
+            .filter(|&(slot, form)| {
+                form.as_ref().map(NodeForm::size) != sizes.get(slot).copied().flatten()
+            })
+            .filter_map(|(slot, _)| u32::try_from(slot).ok().map(NodeIx::new))
+            .collect()
     }
 
     /// Follows one commit's `delta`, which `store` now reflects: forgets removed nodes,
