@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="132.8" height="94.0" role="img" aria-label="swatch">
+  <rect width="132.8" height="94.0" fill="#0c0a12"/>
+  <rect x="4.0" y="4.0" width="124.8" height="22.0" fill="#1a1726"/>
+  <text x="8.0" y="19.0" font-family="Courier New, monospace" font-size="11" fill="#7c7295">swatch | 16×4</text>
+  <line x1="4.0" y1="26.0" x2="128.8" y2="26.0" stroke="#3d3555" stroke-width="1"/>
+  <rect x="4.0" y="42.0" width="7.8" height="16.0" fill="#282c34"/>
+  <rect x="11.8" y="42.0" width="7.8" height="16.0" fill="#e06c75"/>
+  <rect x="19.6" y="42.0" width="7.8" height="16.0" fill="#98c379"/>
+  <rect x="27.4" y="42.0" width="7.8" height="16.0" fill="#e5c07b"/>
+  <rect x="35.2" y="42.0" width="7.8" height="16.0" fill="#61afef"/>
+  <rect x="43.0" y="42.0" width="7.8" height="16.0" fill="#c678dd"/>
+  <rect x="50.8" y="42.0" width="7.8" height="16.0" fill="#56b6c2"/>
+  <rect x="58.6" y="42.0" width="7.8" height="16.0" fill="#abb2bf"/>
+  <rect x="66.4" y="42.0" width="7.8" height="16.0" fill="#5c6370"/>
+  <rect x="74.2" y="42.0" width="7.8" height="16.0" fill="#ff7b89"/>
+  <rect x="82.0" y="42.0" width="7.8" height="16.0" fill="#b5e8a0"/>
+  <rect x="89.8" y="42.0" width="7.8" height="16.0" fill="#ffd787"/>
+  <rect x="97.6" y="42.0" width="7.8" height="16.0" fill="#88ccff"/>
+  <rect x="105.4" y="42.0" width="7.8" height="16.0" fill="#e0a5f5"/>
+  <rect x="113.2" y="42.0" width="7.8" height="16.0" fill="#88dfe8"/>
+  <rect x="121.0" y="42.0" width="7.8" height="16.0" fill="#ffffff"/>
+  <rect x="4.0" y="74.0" width="31.2" height="16.0" fill="#00005f"/>
+  <rect x="35.2" y="74.0" width="15.6" height="16.0" fill="#e06c75"/>
+  <rect x="66.4" y="74.0" width="7.8" height="16.0" fill="#281e3c"/>
+  <text xml:space="preserve" font-family="Courier New, monospace" font-size="13" y="38.5"><tspan x="4.0" fill="#282c34">█</tspan><tspan x="11.8" fill="#e06c75">█</tspan><tspan x="19.6" fill="#98c379">█</tspan><tspan x="27.4" fill="#e5c07b">█</tspan><tspan x="35.2" fill="#61afef">█</tspan><tspan x="43.0" fill="#c678dd">█</tspan><tspan x="50.8" fill="#56b6c2">█</tspan><tspan x="58.6" fill="#abb2bf">█</tspan><tspan x="66.4" fill="#5c6370">█</tspan><tspan x="74.2" fill="#ff7b89">█</tspan><tspan x="82.0" fill="#b5e8a0">█</tspan><tspan x="89.8" fill="#ffd787">█</tspan><tspan x="97.6" fill="#88ccff">█</tspan><tspan x="105.4" fill="#e0a5f5">█</tspan><tspan x="113.2" fill="#88dfe8">█</tspan><tspan x="121.0" fill="#ffffff">█</tspan></text>
+  <text xml:space="preserve" font-family="Courier New, monospace" font-size="13" y="54.5"><tspan x="4.0" fill="#ffffff">a</tspan><tspan x="11.8" fill="#88dfe8">b</tspan><tspan x="19.6" fill="#e0a5f5">c</tspan><tspan x="27.4" fill="#88ccff">d</tspan><tspan x="35.2" fill="#ffd787">e</tspan><tspan x="43.0" fill="#b5e8a0">f</tspan><tspan x="50.8" fill="#ff7b89">g</tspan><tspan x="58.6" fill="#5c6370">h</tspan><tspan x="66.4" fill="#abb2bf">i</tspan><tspan x="74.2" fill="#56b6c2">j</tspan><tspan x="82.0" fill="#c678dd">k</tspan><tspan x="89.8" fill="#61afef">l</tspan><tspan x="97.6" fill="#e5c07b">m</tspan><tspan x="105.4" fill="#98c379">n</tspan><tspan x="113.2" fill="#e06c75">o</tspan><tspan x="121.0" fill="#282c34">p</tspan></text>
+  <text xml:space="preserve" font-family="Courier New, monospace" font-size="13" y="70.5"><tspan x="4.0" fill="#000000">▀</tspan><tspan x="11.8" fill="#0000ff">▀</tspan><tspan x="19.6" fill="#00ff00">▀</tspan><tspan x="27.4" fill="#ff0000">▀</tspan><tspan x="35.2" fill="#ffffff">▀</tspan><tspan x="43.0" fill="#080808">▀</tspan><tspan x="50.8" fill="#808080">▀</tspan><tspan x="58.6" fill="#eeeeee">▀</tspan><tspan x="66.4" fill="#ff0000">▄</tspan><tspan x="74.2" fill="#00ff00">▄</tspan><tspan x="82.0" fill="#0000ff">▄</tspan><tspan x="89.8" fill="#0c0a12">▄</tspan><tspan x="97.6" fill="#dcd7eb">▄</tspan><tspan x="105.4" fill="#ff8000">▄</tspan><tspan x="113.2" fill="#010203">▄</tspan><tspan x="121.0" fill="#fafafa">▄</tspan></text>
+  <text xml:space="preserve" font-family="Courier New, monospace" font-size="13" y="86.5"><tspan x="4.0" fill="#e06c75">A</tspan><tspan x="11.8" fill="#e06c75" font-weight="bold">A</tspan><tspan x="19.6" fill="#e06c75">AA</tspan><tspan x="35.2" fill="#00005f">A</tspan><tspan x="43.0" fill="#00005f" font-weight="bold">A</tspan><tspan x="66.4" fill="#88dfe8">·</tspan></text>
+</svg>

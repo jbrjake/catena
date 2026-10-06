@@ -7,3 +7,4 @@
 
 pub mod braille_asserts;
 pub mod fixtures;
+pub mod svg;

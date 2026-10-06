@@ -5,12 +5,12 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**M1 (raster + scene, plan §19), step 2 of 4.** Step 1 (`Surface`, `CellGrid`, the text-cell
-rule) is done. Next: port `catena-testkit/src/svg.seed.rs` and `svg_snapshots.seed.rs` onto
-`CellGrid` as `catena-testkit/src/svg.rs` (`sha2` enters then): T3 live, with a committed
-`.hash` set and a test that perturbs one color and watches T3 fail. Then steps 3 and 4 of the
-M1 section below. The owner's crates.io name reservation is recommended before M1 lands (plan
-§0); it does not block the work.
+**M1 (raster + scene, plan §19), step 3 of 4.** Steps 1 (`Surface`, `CellGrid`, the text-cell
+rule) and 2 (T3 live) are done. Next: `SubCellCanvas(SUB_W, SUB_H)` replacing `BrailleCanvas`,
+with `u16` dimensions bounded by `raster::MAX_CELLS` (closing "Bound canvas allocation"), and
+the braille, half-block, sextant and ascii encoders, each blitting into a `Surface`. Then step
+4, the scene. The owner's crates.io name reservation is recommended before M1 lands (plan §0);
+it does not block the work.
 
 ## Decisions
 
@@ -42,6 +42,23 @@ M1 section below. The owner's crates.io name reservation is recommended before M
   space with no background and not reversed), emits one `ESC[0;…m` per style change (attributes,
   then foreground, then background) and resets at the end of a styled row. A cell's foreground
   is `None` until written, the terminal's default.
+- **M1: a T3 snapshot with no `.hash` fails** (and writes `{name}.fail.svg`) instead of saving
+  and passing as the seed's did, because gates fail closed and a deleted hash must not pass on
+  CI; `CATENA_UPDATE_SNAPSHOTS=1` accepts. Snapshots live in `tests/visual/` of the package under
+  test, found through the `CARGO_MANIFEST_DIR` that `cargo test` sets at run time (the seed's
+  compile-time `env!` would put every caller's snapshots in the testkit). `VisualSnapshots::check`
+  compares without writing, which is what the perturbed-color test uses on the committed hash.
+- **M1: the T3 hash keeps the seed's line exactly; the picture resolves colors differently.** The
+  hash swaps REVERSED colors and then resolves defaults by position, as the seed did (plan §18).
+  The SVG resolves defaults first and then swaps, as a terminal does, so a reversed label on the
+  default background draws in the background color rather than the default foreground.
+- **M1: the SVG ends a text run at a skipped blank and after a wide glyph.** The seed appended a
+  same-styled cell after a skipped blank to the run before it, so `a b` drew as `ab`, and wide
+  glyphs pushed later cells to wherever the font's advance put them. Neither touches the hash.
+- **M1: `svg.rs` keeps the renderer; its `snapshot` child module holds the snapshot half** (the
+  merged `snapshots.rs`), to stay under 500 lines. `sha2` enters with default features off.
+- **M1: the `png` gallery is deferred,** with its own item below. It is non-gating (plan §16.4),
+  `resvg` is heavy for every `--all-features` gate leg, and no scene exists yet to look at.
 - **Gates run on the newest stable rustc; CI keeps `toolchain: stable`.** Owner: "just update to
   rust 1.99 so you match latest stable so you don't have conflicts with gh ci." So CI is not
   pinned (plan §17's `check` is "× stable"), and a session switches its local default to the
@@ -218,7 +235,7 @@ Plan §19, in four steps, each green on its own. The milestone closes on its own
   verify: `cargo test -p catena -- --list | grep -c
   'a_wide_symbol_owns_a_continuation_cell\|text_cells_follow_the_rule_and_measure_as_display_width\|to_ansi_string_emits_sgr_only_where_the_style_changes'
   | grep -qx 3 && cargo test -p catena raster::`
-- [ ] **Step 2: T3 live** — `catena-testkit/src/svg.rs` from the two staged SVG files, on
+- [x] **Step 2: T3 live** — `catena-testkit/src/svg.rs` from the two staged SVG files, on
   `CellGrid`; a committed `.hash` set; a test that perturbs one color and watches T3 fail.
   verify: `cargo test -p catena-testkit svg && test ! -e catena-testkit/src/svg.seed.rs && test
   -n "$(git ls-files '*.hash')"`
@@ -308,6 +325,11 @@ Each `verify:` lists the named tests first, because a test filter that matches n
   an `allow` (rustc 1.88 does not report it, 1.97 does). Each goes when its engine lands (M2,
   M4, M5); the `expect`s announce themselves, the `fmath` `allow` will not.
   verify: `! grep -rn "dead_code" catena/src`
+
+- [ ] **The `png` gallery (plan §16.4)** — `catena-testkit`'s `png` feature: `resvg`
+  rasterizes `grid_to_svg` into a non-gating `tests/gallery/*.png`, regenerated on demand. Lands
+  once scenes render (M3 at the latest, with the demo); check `resvg`'s `rust-version` against
+  the MSRV first. verify: `cargo test -p catena-testkit --features png png`
 
 ## Later milestones
 

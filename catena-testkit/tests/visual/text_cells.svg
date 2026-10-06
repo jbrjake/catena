@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="101.6" height="78.0" role="img" aria-label="text_cells">
+  <rect width="101.6" height="78.0" fill="#0c0a12"/>
+  <rect x="4.0" y="4.0" width="93.6" height="22.0" fill="#1a1726"/>
+  <text x="8.0" y="19.0" font-family="Courier New, monospace" font-size="11" fill="#7c7295">text_cells | 12×3</text>
+  <line x1="4.0" y1="26.0" x2="97.6" y2="26.0" stroke="#3d3555" stroke-width="1"/>
+  <rect x="4.0" y="58.0" width="15.6" height="16.0" fill="#281e3c"/>
+  <text xml:space="preserve" font-family="Courier New, monospace" font-size="13" y="38.5"><tspan x="4.0" fill="#98c379">日</tspan><tspan x="19.6" fill="#98c379">本</tspan><tspan x="35.2" fill="#98c379">語</tspan><tspan x="58.6" fill="#98c379">ok</tspan></text>
+  <text xml:space="preserve" font-family="Courier New, monospace" font-size="13" y="54.5"><tspan x="4.0" fill="#e5c07b">été</tspan><tspan x="35.2" fill="#e5c07b">&lt;&amp;&gt;</tspan></text>
+  <text xml:space="preserve" font-family="Courier New, monospace" font-size="13" y="70.5"><tspan x="4.0" fill="#c878ff">😀</tspan><tspan x="27.4" fill="#c878ff">bridge</tspan></text>
+</svg>

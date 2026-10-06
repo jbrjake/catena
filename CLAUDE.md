@@ -13,10 +13,10 @@ the host owns the event loop.
 ./scripts/check-perf.sh   # perf ratchet against this machine's bench-baseline.json entry
 cargo xtask lint          # hygiene greps, file length, the build-scaffold rules
 cargo insta review        # accept T2 golden changes
-CATENA_UPDATE_SNAPSHOTS=1 cargo test -p catena-testkit   # re-baseline T3 hashes
+CATENA_UPDATE_SNAPSHOTS=1 cargo test   # re-baseline T3 hashes (each package's tests/visual/)
 ```
 
-`check-perf.sh` lands at M2, insta and the T3 hashes at M1. Gate on the newest stable rustc, the
+`check-perf.sh` lands at M2, insta with M1's scene step. Gate on the newest stable rustc, the
 one CI's `check` runs (owner ruling); a container's `stable` can lag, so check `rustc -V`.
 
 ## Overrides

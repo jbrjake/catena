@@ -1,1 +1,3 @@
 /target
+# T3 failure renderings, written beside the committed snapshots for inspection
+*.fail.svg

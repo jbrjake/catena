@@ -2,3 +2,4 @@
 //! directory, never a new file directly under `tests/`.
 
 mod fixtures;
+mod svg;

@@ -20,6 +20,8 @@ proptest = { version = "1.11", default-features = false, features = ["std"] }
 ratatui-core = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# The T3 snapshot hash (plan §16.4); default features are `alloc` and `oid`, neither needed.
+sha2 = { version = "0.11", default-features = false }
 thiserror = "2"
 # Only `width()`; the default `cjk` feature adds ambiguous-width tables catena does not use.
 unicode-width = { version = "0.2", default-features = false }
