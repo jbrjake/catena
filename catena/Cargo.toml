@@ -16,6 +16,9 @@ workspace = true
 libm.workspace = true
 thiserror.workspace = true
 
+[dev-dependencies]
+catena-testkit.workspace = true
+
 [[test]]
 name = "catena"
 path = "tests/catena/main.rs"

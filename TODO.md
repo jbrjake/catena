@@ -5,12 +5,12 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-M0 step 4, first harvest: `git mv seed/graph/braille.rs` and `seed/graph/braille_tests.rs` to
-`catena/src/raster/braille.seed.rs` and `braille_tests.seed.rs` (commit 1, no content change),
-then port them (commit 2): declare `raster`, make `get_cell` clip and add `try_get_cell`, fold
-the four Bézier loops into one sampler, and move the assert quartet to
-`catena-testkit/src/braille_asserts.rs` with the tests that use it in
-`catena/tests/catena/raster.rs`. Also confirm the first CI run on this branch is green.
+M0 step 4, quadtree: `git mv seed/graph/quadtree.rs catena/src/layout/force/quadtree.seed.rs`
+(commit 1), then port it (commit 2). Write the regression tests first and watch them fail on the
+seed code: a `MAX_DEPTH` bucket (two points past the root bounds on one side) must match a
+brute-force oracle at θ = 0; a coincident pair at the bounds' max corner must keep every routed
+point inside its leaf; a coincident pair must exert no force on itself. Then fix (see Decisions)
+and tighten `theta_approximation_reasonable` to (0.7, 1.4).
 
 ## Decisions
 
@@ -30,7 +30,10 @@ the four Bézier loops into one sampler, and move the assert quartet to
   the oracle is independent of the code under test.
 - **The M0 braille port keeps `BrailleCanvas`; the `SubCellCanvas` generalization is M1.** Plan
   §19 lists the generalization under M1. M0 applies the other §18 changes: `get_cell` clips
-  (with a `try_get_cell` returning `Option`), the four Bézier loops become one sampler.
+  (with a `try_get_cell` returning `Option`), the four Bézier loops become one sampler. It also
+  folds the three Bresenham loops into one walker, because fixing their `i32` overflows (found in
+  the port: endpoint sums, centre-plus-radius, distance squares, dash periods) rewrote every line
+  of them; a 33-raster characterization test pins the output to the seed's, dot for dot.
 - **`word_wrap` leaves by copy, not `git mv`.** The rest of `seed/ui/box_layout.rs` and its tests
   stay as the box-drawing reference for M1 (plan §18 "reference for box drawing only"), and
   §19's M0 `verify:` does not list them. The copy is staged as `text.seed.rs` and ported in the
@@ -79,10 +82,11 @@ the four Bézier loops into one sampler, and move the assert quartet to
   verify: `cargo test -p xtask && cargo xtask lint`
 - [x] **Gates and hooks** — `scripts/smoke.sh`, `scripts/regression.sh`, `.githooks/`; the
   `core.hooksPath` setup noted in `CONTRIBUTING.md`. verify: `./scripts/regression.sh`
-- [ ] **CI skeleton** — `check` (linux/macos/windows via `regression.sh`), `msrv`, `dco`; every
+- [x] **CI skeleton** — `check` (linux/macos/windows via `regression.sh`), `msrv`, `dco`; every
   `uses:` pinned by SHA. verify: `grep -q Signed-off-by .github/workflows/*.yml`, plus a green
-  run of all three `check` legs and `msrv` on this branch
-- [ ] **Harvest braille canvas + tests** → `catena/src/raster/`, the assert quartet →
+  run of all three `check` legs and `msrv` on this branch (run 37495030115: all four
+  `conclusion=success`; `dco` skipped on push, as designed)
+- [x] **Harvest braille canvas + tests** → `catena/src/raster/`, the assert quartet →
   `catena-testkit/src/braille_asserts.rs`. verify: `cargo test -p catena raster && test -z
   "$(git ls-files seed/graph/braille.rs seed/graph/braille_tests.rs)"`
 - [ ] **Harvest quadtree** → `catena/src/layout/force/`, with the `MAX_DEPTH` and jitter fixes and
@@ -115,6 +119,17 @@ the four Bézier loops into one sampler, and move the assert quartet to
 - [ ] **Reserve the crate names on crates.io** — a real `0.0.0` publish of `catena`,
   `catena-ratatui` and `catena-testkit`; the owner's act, recommended before M1 (plan §0).
   verify: `cargo info catena && cargo info catena-ratatui && cargo info catena-testkit`
+
+## Found while porting
+
+- [ ] **Bound the work of a huge segment** — since the M0 port, a line spanning the whole `i32`
+  range no longer overflows, but `walk_line` then steps all ~4·10⁹ pixels. Clipping segments to
+  the canvas before rasterizing (plan §6, ledger row 14) fixes it in M1. verify: a test drawing
+  `(i32::MIN, 0)` to `(i32::MAX, 3)` on an 8×2 canvas finishes under `cargo test` in < 1 s
+- [ ] **Bound canvas allocation** — `BrailleCanvas::new` takes `usize` dimensions and allocates
+  their product unchecked. M1's `SubCellCanvas` should take terminal-sized `u16` dimensions.
+  verify: `cargo test -p catena raster::` with a test that a `u16::MAX`-square canvas request is
+  either refused or bounded
 
 ## Later milestones
 
