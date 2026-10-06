@@ -1,0 +1,13 @@
+---
+source: catena/src/scene/golden_tests.rs
+expression: "render_forms(&scene, (44, 10), Blitter::Braille, &forms)"
+---
+[Ada Lovelace]⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤*●[Charles B…]
+      ⢸                       ⡇
+      ⢸                      ⢸
+      ⢸                      ⡇
+      ⢸                     ⢸
+      ⢸               ┌*─────────┐
+*[日本語テキ…]⠤⠤⠤⠤⠤⠤⠤⠤│Analytical│
+                      │  Engine  │
+                      └──────────┘

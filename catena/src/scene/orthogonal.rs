@@ -14,8 +14,8 @@ pub(crate) const S: u8 = 0b0100;
 /// The arm toward the previous column.
 pub(crate) const W: u8 = 0b1000;
 
-/// The glyphs `Orthogonal` routes are drawn with, indexed by a cell's arms. Every glyph is a
-/// `char` of width 1.
+/// The glyphs `Orthogonal` routes and boxed nodes' borders are drawn with, indexed by a cell's
+/// arms. Every glyph is a `char` of width 1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BoxGlyphs {
     /// Glyph for each arm set, bit 0 north, 1 east, 2 south, 3 west. A cell with one arm draws

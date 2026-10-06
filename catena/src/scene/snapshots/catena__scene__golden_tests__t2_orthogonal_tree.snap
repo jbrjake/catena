@@ -1,9 +1,9 @@
 ---
 source: catena/src/scene/golden_tests.rs
-expression: "render(&scene, (26, 5), Blitter::Braille)"
+expression: "render(&scene, (28, 5), Blitter::Braille)"
 ---
-            root
+            [root]
               │
     ┌─────────┼─────────┐
     │         │         │
-  leaf      leaf      leaf
+  [leaf]    [leaf]    [leaf]

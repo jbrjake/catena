@@ -58,6 +58,18 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
   always, and at least 3 × 3, with the pin marker in its top border's second cell, so a pin
   never resizes it. Every width is a sum of text-cell widths, so `same_layout` labels measure
   alike (property-tested at every cap from 1 to 24).
+- **M2: the compositor draws each node's `NodeForm`, which is public and read-only.** `render`
+  takes a `forms` callback in place of M1's `labels`, and draws a node's form from the top left
+  of its item's bounds, clipped to them; a node with no form draws nothing. `NodeForm`,
+  `FormShape`, `Mark` and `RowLabel` are public because `Compositor` is (scenes are still built
+  only inside the crate, so nothing outside can make one); `ResolvedMetrics` stays
+  crate-private. `RenderOptions::nodes` is a `NodeGlyphs` (`UNICODE` `[ ] … * •`, `ASCII`
+  `[ ] ~ * o`) beside `BoxGlyphs`, which also draws a boxed node's border, until §12's
+  `GlyphSet` gathers them. A box fills its inside with spaces in the node's style and centers
+  its lines both ways, rounding up and left. Seed `ui/box_layout.rs` is deleted with this port
+  (plan §18: "reference for box drawing only"); nothing of its row, pipe or routing helpers has
+  a caller. Invariant N is `invariant_n_every_form_draws_exactly_its_measured_box`: the cells a
+  form writes are exactly its measured box, at every level and at every cap from 1 to 24.
 - **M2: a view starts at zoom 1.0** (`DEFAULT_ZOOM`, one world unit per cell column, the
   identity), which is semantic level 2, so labels show `[truncated]` to 14 columns until zoomed.
   The seed excerpts carry no starting zoom, so this is a choice, not a harvest.
@@ -220,9 +232,8 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
   route, so runs that meet form the corner, tee or cross they make; the last route through a cell
   styles it, a cell with one arm draws the full line, and a step on neither row nor column bends
   horizontal first. `BoxGlyphs::BOX` and `::ASCII` stand in for §12's `GlyphSet`. A node box draws
-  its label from the `labels` callback on its first row, clipped to its bounds and the surface
-  (a wide glyph cut by either is dropped), until node forms arrive with `ResolvedMetrics` (M2). A
-  badge draws `×n` at its cell after its item, clipped to the item's bounds. A glow patches its
+  its measured form (since M2 step 2; see its decision), clipped to its bounds and the surface (a
+  wide glyph cut by either is dropped). A badge draws `×n` at its cell after its item, clipped to the item's bounds. A glow patches its
   bounds' backgrounds with the style's background (its foreground if it has none), after edges so
   edge glyphs keep theirs.
 - **M1: T2 goldens are `insta` snapshots in `catena`'s unit tests** (`src/scene/snapshots/`),

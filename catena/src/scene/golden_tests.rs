@@ -2,53 +2,66 @@
 //! `insta`, with no redaction, because a frame is deterministic. `cargo insta review` accepts a
 //! change.
 
+use std::sync::LazyLock;
+
 use insta::assert_snapshot;
 
 use super::*;
+use crate::geometry::NodeForm;
 use crate::geometry::cell::{CellBox, CellPt, SubPt};
 use crate::geometry::curve::{Bezier, tessellate};
-use crate::graph::{EdgeIx, NodeIx};
-use crate::raster::{Blitter, CellGrid, CellStyle, PaletteColor, text_cells};
+use crate::geometry::testing::forms;
+use crate::graph::{EdgeIx, NodeIx, NodeShape, NodeSpec};
+use crate::raster::{Blitter, CellGrid, CellStyle, PaletteColor};
 
-fn display_width(text: &str) -> u16 {
-    text_cells(text).map(|cell| cell.width).sum()
-}
-
-const LABELS: [&str; 6] = ["ada", "babbage", "lovelace", "日本語", "root", "leaf"];
-
-fn label(ix: NodeIx) -> &'static str {
-    (0..LABELS.len())
-        .find(|&i| NodeIx::new(u32::try_from(i).expect("small")) == ix)
-        .map_or("?", |i| LABELS[i])
-}
+/// The six nodes the primitive scenes draw, at full detail (semantic level 5).
+static FORMS: LazyLock<Vec<NodeForm>> = LazyLock::new(|| {
+    let labels = ["ada", "babbage", "lovelace", "日本語", "root", "leaf"];
+    forms(&labels.map(NodeSpec::label), 5)
+});
 
 fn style(id: StyleId) -> CellStyle {
     CellStyle::new(PaletteColor::Indexed(u8::try_from(id.0).unwrap_or(255)))
 }
 
 fn render(scene: &SceneGraph, size: (u16, u16), blitter: Blitter) -> String {
+    render_forms(scene, size, blitter, &FORMS)
+}
+
+/// `scene` drawn with node `i`'s form `forms[i]`.
+fn render_forms(
+    scene: &SceneGraph,
+    size: (u16, u16),
+    blitter: Blitter,
+    forms: &[NodeForm],
+) -> String {
     let mut grid = CellGrid::new(size.0, size.1);
     let options = RenderOptions {
         blitter,
         ..RenderOptions::default()
     };
-    Compositor::new().render(scene, &mut grid, &options, style, label);
+    Compositor::new().render(scene, &mut grid, &options, style, |ix| forms.get(ix.slot()));
     grid.to_string()
 }
 
-/// A node box holding its label on one row from `(x, y)`; returns its anchor, the label's
-/// middle cell.
+/// One of the six nodes, its box from `(x, y)`; returns its anchor.
 fn node(scene: &mut SceneGraph, ix: u32, x: i32, y: i32) -> CellPt {
-    let ix = NodeIx::new(ix);
-    let width = display_width(label(ix));
-    let bounds = CellBox::new(x, y, u32::from(width), 1);
+    place(scene, ix, &FORMS[NodeIx::new(ix).slot()], x, y)
+}
+
+/// Node `ix` with its form's box from `(x, y)`; returns its anchor.
+fn place(scene: &mut SceneGraph, ix: u32, form: &NodeForm, x: i32, y: i32) -> CellPt {
+    let size = (u32::from(form.width()), u32::from(form.height()));
     scene.push(SceneItem::new(
         Layer::Nodes,
-        bounds,
-        Payload::NodeBox { ix },
+        CellBox::new(x, y, size.0, size.1),
+        Payload::NodeBox {
+            ix: NodeIx::new(ix),
+        },
         StyleId(7),
     ));
-    CellPt::new(x + i32::from(width / 2), y)
+    let anchor = form.anchor();
+    CellPt::new(x + anchor.x, y + anchor.y)
 }
 
 fn path(scene: &mut SceneGraph, ix: u32, z: Layer, route: Route) {
@@ -137,7 +150,7 @@ fn t2_orthogonal_tree() {
         ]);
         path(&mut scene, ix, Layer::EdgesUnder, route);
     }
-    assert_snapshot!(render(&scene, (26, 5), Blitter::Braille));
+    assert_snapshot!(render(&scene, (28, 5), Blitter::Braille));
 }
 
 /// Edges crossing on two layers, under node text, with a parallel-edge badge.
@@ -170,7 +183,7 @@ fn t2_crossing_layers_mask_and_badge() {
         (Blitter::Braille, "t2_crossing_braille"),
         (Blitter::Ascii, "t2_crossing_ascii"),
     ] {
-        assert_snapshot!(name, render(&scene, (28, 9), blitter));
+        assert_snapshot!(name, render(&scene, (30, 9), blitter));
     }
 }
 
@@ -230,5 +243,51 @@ fn t2_shared_trunk() {
         (Blitter::Ascii, "t2_shared_trunk_ascii"),
     ] {
         assert_snapshot!(name, render(&scene, (40, 9), blitter));
+    }
+}
+
+/// One graph at semantic levels 0, 2 and 5 (plan §5): a plain label, a pinned glyph node, a
+/// pinned CJK label and a pinned box, each in the form its level measures, with edges between
+/// their anchors kept off their text.
+#[test]
+fn t2_node_forms_by_level() {
+    let specs = [
+        NodeSpec::label("Ada Lovelace"),
+        NodeSpec {
+            shape: NodeShape::Glyph('●'),
+            pinned: Some((0.0, 0.0)),
+            ..NodeSpec::label("Charles Babbage")
+        },
+        NodeSpec {
+            pinned: Some((0.0, 0.0)),
+            ..NodeSpec::label("日本語テキスト")
+        },
+        NodeSpec {
+            shape: NodeShape::Box { min_w: 0, min_h: 0 },
+            pinned: Some((0.0, 0.0)),
+            ..NodeSpec::label("Analytical Engine")
+        },
+    ];
+    for level in [0, 2, 5] {
+        let forms = forms(&specs, level);
+        let mut scene = SceneGraph::new();
+        let [ada, babbage, cjk, engine] = [(0, 0), (24, 0), (0, 6), (22, 5)]
+            .iter()
+            .zip(0..)
+            .map(|(&(x, y), ix)| place(&mut scene, ix, &forms[NodeIx::new(ix).slot()], x, y))
+            .collect::<Vec<_>>()[..]
+        else {
+            unreachable!("four nodes")
+        };
+        for (ix, (from, to)) in
+            (0..).zip([(ada, babbage), (ada, cjk), (babbage, engine), (cjk, engine)])
+        {
+            path(&mut scene, ix, Layer::EdgesUnder, straight(from, to));
+        }
+        let name = format!("t2_node_forms_level_{level}");
+        assert_snapshot!(
+            name,
+            render_forms(&scene, (44, 10), Blitter::Braille, &forms)
+        );
     }
 }

@@ -2,12 +2,12 @@
 source: catena/src/scene/golden_tests.rs
 expression: "render(&scene, (40, 9), blitter)"
 ---
-ada                           lovelace
-  ⠈⠢⢄                         ⢀⡠⠒⠁
-     ⠑⢄                    ⢀⡠⠒⠁
-       ⠑⠤⡀              ⢀⡠⠒⠁
+[ada]                         [lovelace]
+   ⠈⠢⡀                        ⢀⡠⠒⠁
+     ⠈⠢⡀                   ⢀⡠⠒⠁
+       ⠈⠢⡀              ⢀⡠⠒⠁
          ⠈⡢⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⣒⠁
-        ⢀⠎              ⠉⠢⢄
-      ⢀⠔⠁                  ⠉⠒⢄⡀
-     ⡰⠁                       ⠈⠑⠤⡀
-babbage                         日本語
+        ⢀⠔⠁             ⠉⠢⢄
+       ⡠⠊                  ⠉⠒⢄⡀
+     ⢀⠔⠁                      ⠈⠑⠤⡀
+[babbage]                       [日本語]

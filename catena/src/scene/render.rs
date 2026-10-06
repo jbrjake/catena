@@ -1,11 +1,13 @@
 //! The compositor (plan §7.4): it draws a scene onto a surface and adds nothing. It owns
 //! z-order: polylines go into one sub-cell canvas per layer, OR-merged bottom to top with each
 //! cell colored by the topmost layer that lights it, then blitted once around the label mask;
-//! `Orthogonal` routes become box-drawing glyphs; glow halos tint backgrounds; node text and
+//! `Orthogonal` routes become box-drawing glyphs; glow halos tint backgrounds; node forms and
 //! count badges draw last, in draw order.
 
+use super::nodes::{NodeGlyphs, draw_form};
 use super::orthogonal::{Arms, BoxGlyphs};
 use super::{Decoration, EdgeRoute, Layer, Payload, Route, SceneGraph, StyleId};
+use crate::geometry::NodeForm;
 use crate::geometry::cell::CellBox;
 use crate::graph::NodeIx;
 use crate::raster::{
@@ -21,8 +23,10 @@ pub struct RenderOptions {
     pub cell_aspect: f64,
     /// The ascii blitter's line glyphs.
     pub lines: LineGlyphs,
-    /// The glyphs of `Orthogonal` routes.
+    /// The glyphs of `Orthogonal` routes and of a boxed node's border.
     pub boxes: BoxGlyphs,
+    /// The brackets, ellipsis, pin marker and dot of node forms.
+    pub nodes: NodeGlyphs,
 }
 
 impl Default for RenderOptions {
@@ -32,6 +36,7 @@ impl Default for RenderOptions {
             cell_aspect: 0.5,
             lines: LineGlyphs::BOX,
             boxes: BoxGlyphs::BOX,
+            nodes: NodeGlyphs::UNICODE,
         }
     }
 }
@@ -70,14 +75,16 @@ impl Compositor {
     }
 
     /// Draws `scene` onto `surface`, sized as the surface is. `styles` resolves each item's
-    /// style; `labels` gives each node's text. Total: any scene draws, clipped to the surface.
-    pub fn render<'t, S: Surface + ?Sized>(
+    /// style; `forms` gives each node's measured form, drawn from the top left of its item's
+    /// bounds, and a node with none draws nothing. Total: any scene draws, clipped to the
+    /// surface.
+    pub fn render<'f, S: Surface + ?Sized>(
         &mut self,
         scene: &SceneGraph,
         surface: &mut S,
         options: &RenderOptions,
         styles: impl Fn(StyleId) -> CellStyle,
-        labels: impl Fn(NodeIx) -> &'t str,
+        forms: impl Fn(NodeIx) -> Option<&'f NodeForm>,
     ) {
         let (width, height) = surface.size();
         self.prepare(options, width, height);
@@ -131,14 +138,10 @@ impl Compositor {
                     }
                 }
                 Payload::NodeBox { ix } => {
-                    draw_text(
-                        surface,
-                        item.bounds,
-                        item.bounds.x,
-                        item.bounds.y,
-                        labels(*ix),
-                        style,
-                    );
+                    if let Some(form) = forms(*ix) {
+                        let glyphs = (&options.nodes, &options.boxes);
+                        draw_form(surface, item.bounds, form, style, glyphs);
+                    }
                 }
                 _ => {}
             }

@@ -1,6 +1,9 @@
+use std::sync::LazyLock;
+
 use super::*;
 use crate::geometry::cell::{CellBox, CellPt, SubPt};
-use crate::graph::EdgeIx;
+use crate::geometry::testing::forms;
+use crate::graph::{EdgeIx, NodeSpec};
 use crate::raster::{CellGrid, PaletteColor};
 use crate::scene::{CountBadge, Decoration, EdgeRoute, Route, SceneItem};
 
@@ -19,12 +22,12 @@ fn styles(style: StyleId) -> CellStyle {
     }
 }
 
-fn labels(ix: NodeIx) -> &'static str {
-    if ix == NodeIx::new(1) {
-        "日本 node"
-    } else {
-        "node"
-    }
+/// Node 0 is `[node]`, node 1 `[日本 node]`: full labels, at semantic level 5.
+static FORMS: LazyLock<Vec<NodeForm>> =
+    LazyLock::new(|| forms(&[NodeSpec::label("node"), NodeSpec::label("日本 node")], 5));
+
+fn labels(ix: NodeIx) -> Option<&'static NodeForm> {
+    FORMS.get(ix.slot())
 }
 
 fn ascii() -> RenderOptions {
@@ -180,20 +183,20 @@ fn edges_never_overprint_node_text() {
     ));
     scene.push(node(0, CellBox::new(2, 1, 6, 1)));
     let grid = render(&scene, (10, 3), &ascii());
-    assert_eq!(grid.to_string(), "    │\n──node  ──\n    │");
+    assert_eq!(grid.to_string(), "    │\n──[node]──\n    │");
     assert_eq!(fg(&grid, 2, 1), Some(PaletteColor::Indexed(5)));
 }
 
 #[test]
 fn a_node_label_clips_to_its_box_and_to_the_surface() {
     let mut scene = SceneGraph::new();
-    scene.push(node(1, CellBox::new(-1, 0, 6, 1)));
+    scene.push(node(1, CellBox::new(-2, 0, 7, 1)));
     scene.push(node(0, CellBox::new(4, 1, 2, 1)));
     scene.push(node(0, CellBox::new(6, 2, 9, 1)));
     let grid = render(&scene, (8, 3), &ascii());
     assert_eq!(
         grid.to_string(),
-        " 本 n\n    no\n      no",
+        " 本 n\n    [n\n      [n",
         "the half-visible 日 and the overhanging tail are dropped"
     );
 }
@@ -215,7 +218,7 @@ fn glow_tints_the_background_and_keeps_the_glyph() {
     ));
     scene.push(node(0, CellBox::new(2, 1, 4, 1)));
     let grid = render(&scene, (6, 2), &ascii());
-    assert_eq!(grid.to_string(), "────\n  node");
+    assert_eq!(grid.to_string(), "────\n  [nod");
     let halo = Some(PaletteColor::Rgb(40, 30, 60));
     let at = |x, y| grid.cell(x, y).expect("in range");
     assert_eq!((at(1, 0).symbol(), at(1, 0).bg()), ("─", halo));
@@ -226,7 +229,7 @@ fn glow_tints_the_background_and_keeps_the_glyph() {
     );
     assert_eq!(
         (at(2, 1).symbol(), at(2, 1).bg()),
-        ("n", halo),
+        ("[", halo),
         "text drawn over a halo keeps it"
     );
     assert_eq!(at(4, 1).bg(), None, "outside the halo");
@@ -240,7 +243,7 @@ fn count_badge_rides_any_item() {
         at: CellPt::new(x, y),
     };
     let mut scene = SceneGraph::new();
-    scene.push(node(0, CellBox::new(0, 0, 8, 1)).with_badge(badge(5, 0)));
+    scene.push(node(0, CellBox::new(0, 0, 8, 1)).with_badge(badge(6, 0)));
     scene.push(
         edge(
             0,
@@ -280,7 +283,7 @@ fn count_badge_rides_any_item() {
     let grid = render(&scene, (10, 7), &ascii());
     assert_eq!(
         grid.to_string(),
-        "node ×3\n\n────×3────\n\n─×3───────\n\n×3"
+        "[node]×3\n\n────×3────\n\n─×3───────\n\n×3"
     );
 }
 
@@ -291,7 +294,7 @@ fn a_badge_clips_to_its_item() {
         count: 1234,
         at: CellPt::new(3, 0),
     }));
-    assert_eq!(render(&scene, (10, 1), &ascii()).to_string(), "nod×12");
+    assert_eq!(render(&scene, (10, 1), &ascii()).to_string(), "[no×12");
 }
 
 #[test]

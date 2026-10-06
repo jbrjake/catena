@@ -2,6 +2,7 @@
 
 use proptest::prelude::*;
 
+use super::metrics::{NodeForm, measure};
 use super::zoom::{SemanticZoom, SemanticZoomTable};
 use crate::graph::{NodeShape, NodeSpec};
 
@@ -11,6 +12,25 @@ const ZOOMS: [f64; 6] = [0.2, 0.33, 1.0, 2.0, 3.0, 4.0];
 /// Level `level` of the default table.
 pub(crate) fn at(level: usize) -> SemanticZoom {
     SemanticZoomTable::default().level(ZOOMS[level])
+}
+
+/// `spec` measured at `level` of `table`: how a test outside `geometry/` gets a form without a
+/// graph store.
+pub(crate) fn measured(
+    spec: &NodeSpec,
+    level: SemanticZoom,
+    table: &SemanticZoomTable,
+) -> NodeForm {
+    measure(spec, level, table)
+}
+
+/// Each of `specs` measured at level `level` of the default table.
+pub(crate) fn forms(specs: &[NodeSpec], level: usize) -> Vec<NodeForm> {
+    let table = SemanticZoomTable::default();
+    specs
+        .iter()
+        .map(|spec| measure(spec, at(level), &table))
+        .collect()
 }
 
 /// The default table at each of its levels, then level 1 of tables capping it at every width
