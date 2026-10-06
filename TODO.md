@@ -31,10 +31,11 @@ M2 in this order, each step green on its own:
    `layout::force::engine::lay_out(params, store, metrics, Frame { area, cell_aspect }, change,
    &mut ForceState)`, world positions (node centers) by slot. Nothing calls it outside tests
    yet, so its modules carry `expect(dead_code)`.
-4. `GridSnapper` and the viewport (plan §6): isotropic `Fit::Contain`, `cell_aspect` once, the
-   50-ring spiral, the enforced 2-row gap, canonical/derived split, zoom-out re-snap, anchor
-   compensation; invariants A, G and I. Port the staged `geometry/snap{,_tests}.seed.rs` (the
-   move commit is done). With it the layout goes live: `GraphView` holds the viewport (a
+4. `GridSnapper` and the viewport (plan §6): ~~isotropic `Fit::Contain`, `cell_aspect` once,
+   the 50-ring spiral, the enforced 2-row gap~~ (landed as `geometry::snap`: `fit`, `resolve`,
+   `derive`, `placement_order`; invariants A and I), then the canonical/derived split as
+   viewport state (`f64` pan and zoom, `ref_zoom`), zoom-out re-snap and anchor compensation
+   with invariant G. With it the layout goes live: `GraphView` holds the viewport (a
    default size until the first render, to be decided), the world positions and `ForceParams`
    (the builder's `layout(LayoutKind::Force(..))`), runs `lay_out` synchronously at the end of
    a `Topology` `update` (plan §4.2), places `repinned` nodes at their pins, and lets the
@@ -50,6 +51,26 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
 
 ## Decisions
 
+- **M2 step 4: the snapper's fit (plan §6).** At zoom 1 the nodes' centers span the grid less
+  a one-cell margin and half the widest and tallest box at each edge, so every box fits.
+  `Fit::Contain` takes the smaller of the two axis scales (columns per world unit across, rows
+  per world unit times `cell_aspect` down) and centers the slack axis; `Fit::Stretch` scales
+  each axis to fill. A world of one point fits to the middle. The zoom the snap runs at scales
+  the fit about the margin, the same point `derive` scales about, so a snap at `ref_zoom`
+  derived at `ref_zoom` with no pan is the snap (invariant I). A snap stores each node's
+  anchor cell (`NodeForm::anchor`, its box's middle), and its box is placed around it, so an
+  edge's end and a node's box cannot disagree.
+- **M2 step 4: collision resolution.** Nodes are placed pinned first, then by degree (every
+  incident edge, most first), each in canonical order. Every box is grown by one row above and
+  below for the test, so stacked boxes keep two empty rows between them (ledger row 28); plan
+  §6 rules no horizontal gap, and there is none. A colliding node walks the seed's spiral: its
+  corner walk, down, left, up, right, each leg longer every other turn, 100 legs being plan
+  §6's 50 rings, with the seed's ring counting kept. The seed stepped a box width across and
+  `max(2, height)` down; here a step down is the box's height plus the two-row gap, so a node
+  moved down lands right below its blocker. Past the last ring a node keeps the last candidate
+  and overlaps (`Snap::overlapping`); every node moved off its rounded fit cell is in
+  `Snap::displaced`, which plan §6's re-snap cascade counts. Claimed cells sit in a hash set
+  with a fixed hasher, only ever asked about, so nothing random reaches the output.
 - **M2 step 3: `layout_fr.rs` splits three ways.** Its FR core is ported in
   `layout/force/simulation.rs`, a rewrite of the loop, so `git show -M20%` pairs the staged seed
   with `ring.seed.rs`, its largest verbatim slice, and shows the simulation as new.
@@ -709,7 +730,8 @@ Each `verify:` lists the named tests first, because a test filter that matches n
   `raster::text`'s and narrowed `geometry::zoom`'s to `MIN_ZOOM`, `MAX_ZOOM` and
   `SemanticZoomTable::new` (step 4), with `ResolvedMetrics::{level, form, set_level}` waiting on
   steps 3 to 5. M2 step 3 moved the quadtree's onto `layout::force`'s `engine`, `mobility`,
-  `ring` and `simulation` modules, which go live with step 4's wiring.
+  `ring` and `simulation` modules, which go live with step 4's wiring, as does
+  `geometry::snap`.
   verify: `! grep -rn "dead_code" catena/src`
 
 - [ ] **Fit the islands and the ring to the frame (needs the owner: plan §8.2)** — the

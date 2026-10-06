@@ -3,6 +3,14 @@
 pub mod cell;
 pub mod curve;
 mod metrics;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "GraphView snaps its layout once the viewport lands (M2 step 4)"
+    )
+)]
+mod snap;
 #[cfg(test)]
 pub(crate) mod testing;
 mod zoom;
