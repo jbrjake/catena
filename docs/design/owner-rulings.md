@@ -91,3 +91,25 @@ says nothing about branches, so this overrides no plan text.
 | §16.2-B: "every input edge yields exactly one scene path" | A3: every input edge maps to exactly one route, whose segments connect its anchors |
 | §7.3: the parallel-edge "`×n` count badge at the midpoint" | A3: a general `CountBadge` decoration any scene item can carry |
 | §10.1: the default key table | A4: gains the unbundle toggle; hover gains hover-lift |
+
+## Relayout: survivors are reassessed, zoom changes stay local, resizes are global
+
+Given in answer to M2 step 3's finding that the seed's warm start breaks invariant F (its cold
+run freezes before equilibrium) and to the stopgap that held F by letting survivors barely move:
+
+> i'm not saying i prefer slower cooling if it's going to take a long time and hurt
+> performance, but we can't have new nodes not leading to older nodes getting reassessed the
+> way they should be. it will look bad. i've seen systems do that before and it makes it seem
+> very artificial, and you lose a lot of semantic value. a zoom level change should not require
+> global relayout just local like you hacked in for relayout, because changes should be
+> isolated to the parts that are now collapsed/uncollapsed. a resize needs a full relayout
+> because everything needs to spread out and use the space properly.
+
+| Plan text | Overridden by |
+|---|---|
+| §6: "a semantic-zoom level transition (warm, since box widths changed)" relayouts | A level change relayouts locally, only around the nodes whose boxes collapsed or expanded |
+| §6: "a viewport resize (warm, since `k` depends on the usable area)" | A resize is a full relayout: every node free to spread into the new space |
+
+It also rules out M2 step 3's stopgap (survivors annealing from `converge_eps` in every warm
+run): a topology change must let the older nodes it affects move as the forces say. Slower
+cooling is acceptable only within the performance budgets of plan §15.1.

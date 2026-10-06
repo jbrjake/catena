@@ -6,8 +6,29 @@ to exit 0. Milestones and their gates come from plan §19.
 ## Now
 
 **M2 (graph model + force layout + viewport, plan §19) is under way: steps 1 to 3, the graph
-store, `ResolvedMetrics` and the force layout, are done (`## M2` below); step 4, the snapper
-and viewport, is next.** M2 in this order, each step green on its own:
+store, `ResolvedMetrics` and the force layout, are done (`## M2` below). Next is the relayout
+rework the owner ruled on (`owner-rulings.md`, "Relayout"; the item under `## M2`), then step
+4, the snapper and viewport.**
+
+The rework, from the ruling: new nodes must lead the older nodes they affect to be reassessed
+as the forces say, so the step 3 stopgap (every survivor nearly frozen in a warm run) goes; a
+semantic level change relayouts only around the nodes whose boxes collapsed or expanded; a
+resize is a full relayout, every node free to use the new space. Slower cooling only within
+plan §15.1's budgets (cold 200 nodes / 400 edges ≤ 50 ms, warm ≤ 10 ms, cold 1,000 / 2,000 ≤
+400 ms), so measure before choosing. What step 3 found, to start from: the seed's cooling
+(span / 2, × 0.95 a step) freezes a cold run below `converge_eps` near step 94, before
+equilibrium (500 or 2000 iterations change nothing; cooling at 0.99 over 1000 steps nearly
+reaches it), and that, not the change itself, is what made a free warm restart move every
+node; a cold run that ends near equilibrium would let distant nodes stay put on their own,
+with no cap. Options to weigh: an adaptive step (Hu 2005: grow the step while the energy
+falls, shrink it when it rises) within the same budget; mobility that fades with distance
+from the changed nodes; for a level change, `k` held from the last layout (it now follows the
+average label width, so a level change rescales every distance) and a per-node size term in
+repulsion (there is none yet), so wider boxes push only their neighbors. Invariant F stays the
+check for topology changes; a merge of two islands may rightly move one of them, so read F
+over the whole suite if single seeds fall short, and say so.
+
+M2 in this order, each step green on its own:
 
 1. ~~The graph store~~ (plan §4): landed.
 2. ~~`ResolvedMetrics`~~ (plan §5): landed. `GraphView::pending` now holds every commit's
@@ -25,10 +46,9 @@ and viewport, is next.** M2 in this order, each step green on its own:
    default size until the first render, to be decided), the world positions and `ForceParams`
    (the builder's `layout(LayoutKind::Force(..))`), runs `lay_out` synchronously at the end of
    a `Topology` `update` (plan §4.2) with the commit's `added`, places `repinned` nodes at their
-   pins, and lets the snapper consume `reshaped` and `repinned`, clearing `pending`. Decide
-   whether a semantic level change or a resize relayouts with survivors free (a reflow) or
-   capped as after a topology change (see the step 3 decision). `simulation::Run` takes one
-   step at a time, which is what `LayoutPacing::Animated` needs once `tick` exists.
+   pins, and lets the snapper consume `reshaped` and `repinned`, clearing `pending`. A level
+   change and a resize relayout as the owner ruled (above). `simulation::Run` takes one step
+   at a time, which is what `LayoutPacing::Animated` needs once `tick` exists.
 5. Layout → `SceneGraph` → `render_to_string`; T3 scene snapshots; the T4 tier with the
    `catena-render-hash` bin and committed hashes; invariants B–E and N on real scenes.
 6. The zero-allocation frame test, the first criterion bench, `scripts/check-perf.sh` with
@@ -80,7 +100,9 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
   halved ring cut through the core (the ring tests fail with it). The ring is round in world
   space; the seed squashed its height by half in cells. `lay_out` takes the commit's `added`
   set, whose slots start fresh even where `positions` still holds a removed node's place.
-- **M2 step 3: in a warm run a survivor anneals from `converge_eps`, not the warm temperature.**
+- **Overruled (owner, "Relayout" in `owner-rulings.md`), still in the code until the relayout
+  rework replaces it:**
+  **M2 step 3: in a warm run a survivor anneals from `converge_eps`, not the warm temperature.**
   Plan §8.3 has survivors start "with the warm temperature"; measured over the generated
   families (120 × 40 cells, `Fit::Contain` scale, 6 of 120 nodes added), that kept only 3% to
   82% of survivors within two cells, against invariant F's 90%, and a warm rerun of an
@@ -557,6 +579,13 @@ Plan §19, in the six steps of `## Now`, each green on its own. The milestone cl
   'a_warm_relayout_after_five_percent_additions_keeps_nine_in_ten_survivors_within_two_cells\|weighted_bodies_at_theta_zero_match_the_weighted_brute_force_sum\|iterations_are_honored_as_given\|the_starting_circle_is_round\|degree_scaled_repulsion_weights_each_pair_by_both_masses\|islands_pack_left_to_right_largest_first\|isolated_nodes_ring_the_core'
   | grep -qx 7 && cargo test -p catena -- layout::force && cargo test -p catena-testkit generated
   && test -z "$(git ls-files seed/graph/layout_fr.rs seed/graph/layout_fr_tests.rs)"`
+- [ ] **Relayout per the owner's ruling** (`owner-rulings.md`, "Relayout"; the plan is under
+  `## Now`) — survivors near a topology change move as the forces say (no blanket cap), a level
+  change relayouts locally around the reshaped nodes, a resize relayouts every node; within the
+  §15.1 budgets, measured. The three tests named below are written red first.
+  verify: `cargo test -p catena -- --list | grep -c
+  'new_nodes_lead_their_neighbors_to_be_reassessed\|a_level_change_moves_only_nodes_near_reshaped_ones\|a_resize_relays_out_every_node'
+  | grep -qx 3 && cargo test -p catena -- layout::force && ! grep -rn "settle" catena/src/layout/force/simulation.rs`
 
 ## Course correction (owner rulings A1–A4)
 
