@@ -41,17 +41,22 @@ fn metrics(store: &Store) -> ResolvedMetrics {
 
 /// A cold layout of `store`.
 fn cold(store: &Store) -> Vec<Option<(f64, f64)>> {
-    let mut positions = Vec::new();
+    cold_state(store).positions
+}
+
+/// A cold layout of `store`, with all the layout keeps.
+fn cold_state(store: &Store) -> ForceState {
+    let mut state = ForceState::default();
     let all = store.nodes_in_order().iter().copied().collect();
     lay_out(
         &ForceParams::default(),
         store,
         &metrics(store),
         FRAME,
-        &all,
-        &mut positions,
+        Change::Topology(&all),
+        &mut state,
     );
-    positions
+    state
 }
 
 fn position(store: &Store, positions: &[Option<(f64, f64)>], key: &'static str) -> (f64, f64) {
@@ -249,8 +254,8 @@ fn only_live_slots_have_positions() {
 #[test]
 fn a_reused_slot_starts_fresh() {
     let mut store = build(&["a", "b", "c"], &[("a", "b"), ("b", "c")]);
-    let mut positions = cold(&store);
-    let old_c = position(&store, &positions, "c");
+    let mut state = cold_state(&store);
+    let old_c = position(&store, &state.positions, "c");
     let ((), delta) = store
         .transact(|tx| {
             tx.remove_node(&"c")?;
@@ -262,8 +267,8 @@ fn a_reused_slot_starts_fresh() {
         &store,
         &metrics(&store),
         FRAME,
-        &delta.added,
-        &mut positions,
+        Change::Topology(&delta.added),
+        &mut state,
     );
     let ((), delta) = store
         .transact(|tx| {
@@ -275,9 +280,18 @@ fn a_reused_slot_starts_fresh() {
     let d = store.ix_of(&"d").expect("live");
     assert_eq!(d.slot(), 2, "d takes c's freed slot");
     assert_eq!(delta.added.iter().collect::<Vec<_>>(), [&d]);
-    let graph = Graph::of(&store, &metrics(&store), FRAME, &delta.added, &positions);
+    let mut graph = Graph::of(&store, &metrics(&store), FRAME);
+    let params = ForceParams::default();
+    let base = graph.scale(&params, FRAME.area);
+    let starts = mobility::starts(
+        &params,
+        &graph.view(),
+        Change::Topology(&delta.added),
+        &state,
+        base,
+    );
     assert_eq!(
-        graph.previous[graph.local[d.slot()]],
+        starts.previous[graph.local[d.slot()]],
         None,
         "not c's old place, {old_c:?}"
     );

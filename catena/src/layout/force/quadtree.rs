@@ -113,24 +113,53 @@ struct Body {
 }
 
 impl Body {
-    /// This body's repulsion on a point at `(x, y)`: its mass times [`repulsion`].
-    fn repulsion_on(&self, x: f64, y: f64, k: f64) -> (f64, f64) {
-        let (fx, fy) = repulsion(x - self.x, y - self.y, k);
-        (fx * self.mass, fy * self.mass)
+    /// This body's push on a point at `(x, y)`: its mass times [`push`].
+    fn push_on(&self, x: f64, y: f64, k: f64) -> Push {
+        push(x - self.x, y - self.y, k).scaled(self.mass)
     }
 }
 
-/// The FR repulsion `k² / d` of a unit mass on a point offset `(dx, dy)` from it, with `d`
-/// floored at 0.01. Within `EPSILON` the point is the body itself, or coincident with it: no
-/// direction exists, so it feels nothing. The one kernel the tree and the exact sum share.
-pub(super) fn repulsion(dx: f64, dy: f64, k: f64) -> (f64, f64) {
+/// What repelling mass exerts on a point: the force, and the stiffness, how fast that force
+/// changes as the point moves.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub(crate) struct Push {
+    pub(crate) force: (f64, f64),
+    /// The norm of the force's gradient, `k² / d²` for one unit mass: the simulation divides
+    /// a step by it so the step cannot overshoot (see `simulation`).
+    pub(crate) stiffness: f64,
+}
+
+impl Push {
+    fn scaled(self, m: f64) -> Push {
+        Push {
+            force: (self.force.0 * m, self.force.1 * m),
+            stiffness: self.stiffness * m,
+        }
+    }
+
+    fn plus(self, other: Push) -> Push {
+        Push {
+            force: (self.force.0 + other.force.0, self.force.1 + other.force.1),
+            stiffness: self.stiffness + other.stiffness,
+        }
+    }
+}
+
+/// The FR repulsion `k² / d` of a unit mass on a point offset `(dx, dy)` from it, and its
+/// stiffness `k² / d²`, with `d` floored at 0.01. Within `EPSILON` the point is the body
+/// itself, or coincident with it: no direction exists, so it feels nothing. The one kernel the
+/// tree and the exact sum share.
+pub(super) fn push(dx: f64, dy: f64, k: f64) -> Push {
     let dist_sq = dx * dx + dy * dy;
     if dist_sq < EPSILON * EPSILON {
-        return (0.0, 0.0);
+        return Push::default();
     }
     let dist = dist_sq.sqrt().max(0.01);
     let force = (k * k) / dist;
-    ((dx / dist) * force, (dy / dist) * force)
+    Push {
+        force: ((dx / dist) * force, (dy / dist) * force),
+        stiffness: force / dist,
+    }
 }
 
 /// Barnes-Hut quadtree for spatial partitioning of 2D point masses.
@@ -274,14 +303,20 @@ impl QuadTree {
         }
     }
 
-    /// Compute the repulsive force on a body at (x, y) from this subtree.
+    /// The repulsive force on a body at (x, y) from this subtree.
+    #[cfg(test)]
+    pub(crate) fn compute_force(&self, x: f64, y: f64, theta: f64, k: f64) -> (f64, f64) {
+        self.compute_push(x, y, theta, k).force
+    }
+
+    /// The repulsive push on a body at (x, y) from this subtree: its force and stiffness.
     ///
     /// `theta` controls the accuracy/speed tradeoff (0.0 = exact, higher = faster).
     /// A cell is approximated as a point mass when `cell_size / distance < theta`.
     /// `k` is the Fruchterman-Reingold optimal distance parameter.
-    pub(crate) fn compute_force(&self, x: f64, y: f64, theta: f64, k: f64) -> (f64, f64) {
+    pub(crate) fn compute_push(&self, x: f64, y: f64, theta: f64, k: f64) -> Push {
         if self.total_mass == 0.0 {
-            return (0.0, 0.0);
+            return Push::default();
         }
 
         let Some(children) = &self.children else {
@@ -290,8 +325,8 @@ impl QuadTree {
                 .body
                 .iter()
                 .chain(&self.bucket)
-                .map(|b| b.repulsion_on(x, y, k))
-                .fold((0.0, 0.0), |(fx, fy), (bx, by)| (fx + bx, fy + by));
+                .map(|b| b.push_on(x, y, k))
+                .fold(Push::default(), Push::plus);
         };
 
         let dx = x - self.cx;
@@ -303,18 +338,17 @@ impl QuadTree {
             // Approximate: treat entire subtree as one point mass.
             // FR repulsive force: f = k^2 / d, scaled by mass (body count).
             let force = self.total_mass * (k * k) / dist;
-            return ((dx / dist) * force, (dy / dist) * force);
+            return Push {
+                force: ((dx / dist) * force, (dy / dist) * force),
+                stiffness: force / dist,
+            };
         }
 
         // Cell too close — recurse into children for accuracy.
-        let mut fx = 0.0;
-        let mut fy = 0.0;
-        for child in &**children {
-            let (cfx, cfy) = child.compute_force(x, y, theta, k);
-            fx += cfx;
-            fy += cfy;
-        }
-        (fx, fy)
+        children
+            .iter()
+            .map(|child| child.compute_push(x, y, theta, k))
+            .fold(Push::default(), Push::plus)
     }
 }
 

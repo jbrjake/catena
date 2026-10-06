@@ -6,27 +6,18 @@ to exit 0. Milestones and their gates come from plan §19.
 ## Now
 
 **M2 (graph model + force layout + viewport, plan §19) is under way: steps 1 to 3, the graph
-store, `ResolvedMetrics` and the force layout, are done (`## M2` below). Next is the relayout
-rework the owner ruled on (`owner-rulings.md`, "Relayout"; the item under `## M2`), then step
-4, the snapper and viewport.**
+store, `ResolvedMetrics` and the force layout, and the relayout rework the owner ruled on are
+done (`## M2` below). Next is step 4, the snapper and viewport, which puts the layout live.**
 
-The rework, from the ruling: new nodes must lead the older nodes they affect to be reassessed
-as the forces say, so the step 3 stopgap (every survivor nearly frozen in a warm run) goes; a
-semantic level change relayouts only around the nodes whose boxes collapsed or expanded; a
-resize is a full relayout, every node free to use the new space. Slower cooling only within
-plan §15.1's budgets (cold 200 nodes / 400 edges ≤ 50 ms, warm ≤ 10 ms, cold 1,000 / 2,000 ≤
-400 ms), so measure before choosing. What step 3 found, to start from: the seed's cooling
-(span / 2, × 0.95 a step) freezes a cold run below `converge_eps` near step 94, before
-equilibrium (500 or 2000 iterations change nothing; cooling at 0.99 over 1000 steps nearly
-reaches it), and that, not the change itself, is what made a free warm restart move every
-node; a cold run that ends near equilibrium would let distant nodes stay put on their own,
-with no cap. Options to weigh: an adaptive step (Hu 2005: grow the step while the energy
-falls, shrink it when it rises) within the same budget; mobility that fades with distance
-from the changed nodes; for a level change, `k` held from the last layout (it now follows the
-average label width, so a level change rescales every distance) and a per-node size term in
-repulsion (there is none yet), so wider boxes push only their neighbors. Invariant F stays the
-check for topology changes; a merge of two islands may rightly move one of them, so read F
-over the whole suite if single seeds fall short, and say so.
+What step 4 inherits from the rework: `lay_out` follows a `Change`. `GraphView` keeps one
+`ForceState` and passes `Change::Topology(&pending.added)` after a `Topology` update,
+`Change::Level(&reshaped)` when the semantic level changes, and `Change::Resize` when the
+viewport does. `ResolvedMetrics::set_level` returns only whether the level changed; it must
+return the nodes whose box changed, as `apply` does for a commit. Invariant F is measured on
+world positions at the later layout's `Fit::Contain` scale; once the snapper exists, read it
+again on snapped cells, since a refit after a node lands outside the old bounding box moves
+every cell (anchor compensation, plan §6, holds only the focused node). Unratified choices
+the rework made are flagged under `## Decisions` for the owner.
 
 M2 in this order, each step green on its own:
 
@@ -36,19 +27,20 @@ M2 in this order, each step green on its own:
    edits, which re-snap with an unchanged box. Steps 3 and 4 consume it; nothing clears it yet.
    No `Payload::Label`: a node's text is part of its `NodeBox` form (see the decision), so
    §7.4's `Label{..}` waits for free-standing text, if any.
-3. ~~The force layout~~ (plan §8): landed as `layout::force::engine::lay_out(params, store,
-   metrics, Frame { area, cell_aspect }, added, positions)`, world positions (node centers) by
-   slot. Nothing calls it outside tests yet, so its modules carry `expect(dead_code)`.
+3. ~~The force layout~~ (plan §8), with ~~the relayout rework~~: landed as
+   `layout::force::engine::lay_out(params, store, metrics, Frame { area, cell_aspect }, change,
+   &mut ForceState)`, world positions (node centers) by slot. Nothing calls it outside tests
+   yet, so its modules carry `expect(dead_code)`.
 4. `GridSnapper` and the viewport (plan §6): isotropic `Fit::Contain`, `cell_aspect` once, the
    50-ring spiral, the enforced 2-row gap, canonical/derived split, zoom-out re-snap, anchor
    compensation; invariants A, G and I. Port the staged `geometry/snap{,_tests}.seed.rs` (the
    move commit is done). With it the layout goes live: `GraphView` holds the viewport (a
    default size until the first render, to be decided), the world positions and `ForceParams`
    (the builder's `layout(LayoutKind::Force(..))`), runs `lay_out` synchronously at the end of
-   a `Topology` `update` (plan §4.2) with the commit's `added`, places `repinned` nodes at their
-   pins, and lets the snapper consume `reshaped` and `repinned`, clearing `pending`. A level
-   change and a resize relayout as the owner ruled (above). `simulation::Run` takes one step
-   at a time, which is what `LayoutPacing::Animated` needs once `tick` exists.
+   a `Topology` `update` (plan §4.2), places `repinned` nodes at their pins, and lets the
+   snapper consume `reshaped` and `repinned`, clearing `pending`. A level change and a resize
+   relayout through their `Change` (above). `simulation::Run` takes one step at a time, which
+   is what `LayoutPacing::Animated` needs once `tick` exists.
 5. Layout → `SceneGraph` → `render_to_string`; T3 scene snapshots; the T4 tier with the
    `catena-render-hash` bin and committed hashes; invariants B–E and N on real scenes.
 6. The zero-allocation frame test, the first criterion bench, `scripts/check-perf.sh` with
@@ -68,12 +60,15 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
   slices of the moved file, as `word_wrap`'s copy was.
 - **M2 step 3: the simulation's arithmetic.** A world position is a node's center. Each body's
   repelling mass is its weight (`Uniform`), times its degree plus one (`DegreeScaled`), and
-  the force on `i` is `mᵢ Σ mⱼ k² / d`, which is the seed's FR when every weight is 1. The
-  quadtree takes weighted bodies; a massless one keeps its place (emptiness is tested by body,
+  the force on `i` is `mᵢkᵢ Σ mⱼkⱼ / d` with `kᵢ` its ideal distance (see the per-node
+  decision), which is the seed's FR when every weight is 1 and every `kᵢ` is `k`. The quadtree
+  takes weighted bodies (mass times ideal distance) and returns each point's stiffness, `Σ mⱼ
+  k² / d²`, from the same walk; a massless body keeps its place (emptiness is tested by body,
   not by mass) and pushes nothing. At or below `bh_threshold` the exact sum runs on the tree's
   own kernel, so θ = 0 matches it. Gravity stays unweighted, toward the unweighted centroid, as
-  in the seed; attraction is `weight · d² / k`. A pinned body pushes and pulls but never moves; a
-  move that would leave a coordinate non-finite is skipped. `ForceParams` is
+  in the seed; attraction is `weight · d² / √(kᵢ kⱼ)`. A pinned body pushes and pulls but never
+  moves, and its own force is not summed; a move that would leave a coordinate non-finite is
+  skipped. `ForceParams` is
   `#[non_exhaustive]` with public fields, so a host edits a default or a preset (`quality`,
   `fast`), and a run clamps its floats (NaN takes the default, `cooling` keeps to `0..=1`, the
   rest to finite non-negative values) rather than refusing them.
@@ -85,8 +80,8 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
   layout, which ramp-in only softens. The ramp scales what a new body exerts (its repelling mass
   and its springs' pull on others) by `(step + 1) / ramp_in_iterations` until it is whole.
 - **M2 step 3: islands and the ring (plan §8.2).** The core is the nodes joined by a layout
-  edge that is not a self-loop; each connected component is simulated alone with one `k` for
-  the whole core, so all islands share a scale. An island none of whose nodes has a place
+  edge that is not a self-loop; each connected component is simulated alone with one base
+  distance `√(area / core size)` for the whole core, so all islands share a scale. An island none of whose nodes has a place
   (previous or pinned) is new: islands are ordered largest first, then by first node, and new
   ones are packed left to right after the placed ones' box (from x = 0 when none is placed),
   4 columns apart, centered on the placed ones' middle. A placed island stays where its
@@ -98,26 +93,69 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
   because its core already filled the viewport when the ring was placed, so a ring outside it
   would have been off screen; here the snapper fits core and ring together afterwards, and the
   halved ring cut through the core (the ring tests fail with it). The ring is round in world
-  space; the seed squashed its height by half in cells. `lay_out` takes the commit's `added`
-  set, whose slots start fresh even where `positions` still holds a removed node's place.
-- **Overruled (owner, "Relayout" in `owner-rulings.md`), still in the code until the relayout
-  rework replaces it:**
-  **M2 step 3: in a warm run a survivor anneals from `converge_eps`, not the warm temperature.**
-  Plan §8.3 has survivors start "with the warm temperature"; measured over the generated
-  families (120 × 40 cells, `Fit::Contain` scale, 6 of 120 nodes added), that kept only 3% to
-  82% of survivors within two cells, against invariant F's 90%, and a warm rerun of an
-  unchanged graph moved up to 97% of nodes past two cells. The cause: the seed's cooling (span
-  / 2, × 0.95 a step) drops below `converge_eps` near step 94, so a cold run stops frozen, not at
-  equilibrium (500 or 2000 iterations change nothing; cooling at 0.99 over 1000 nearly fixes
-  it, at ten times the cost), and the warm restart at span / 8 relaxes everything. Now a
-  survivor's step cap is the temperature times `converge_eps / T₀`: it starts at
-  `converge_eps` and cools with the run, so its whole drift stays under `converge_eps / (1 −
-  cooling)`, 10 units; new nodes keep the full warm temperature. Every default is unchanged.
-  With it every seed keeps 100% within two cells (24 runs at 60 and 120 nodes, and 8
-  unchanged reruns). The cost: survivors barely move in any warm run, so islands that new
-  nodes join stay apart on long edges until a cold layout. Open for step 4: a semantic level
-  change or a resize widens boxes and changes `k`, and may want survivors free (a reflow
-  rather than a settle). Unratified: the owner may prefer slower cooling.
+  space; the seed squashed its height by half in cells. A topology `Change` carries the
+  commit's `added` set, whose slots start fresh even where the state still holds a removed
+  node's place.
+- **Relayout: a change reaches `tether_reach` hops (owner, "Relayout").** The ruling asks
+  that new nodes lead the older nodes they affect to be reassessed, that a level change stay
+  local to the reshaped nodes, and that a resize free every node. A topology or level `Change`
+  reaches `tether_reach` (2) hops along layout edges from what changed: a node new to the
+  layout, or one that had no layout edge and now has (its ring place says nothing about where
+  it belongs, so it starts beside its neighbors), is hop 0; a survivor that gained or lost a
+  layout neighbor is hop 1, found by comparing each node's neighbors with those `ForceState`
+  kept from the last run (the store's `Delta` does not say which survivors were rewired); a
+  reshaped node is hop 0 of a level change. Within reach a node moves as its forces say,
+  tethered to where it was by `tether_near` (0.1) up to one hop and linearly up to
+  `tether_far` (30) at the reach; beyond it a node holds its place exactly (pinned there for
+  the run, still pushing), and an island with no node left free is not simulated at all. This
+  is mobility fading with graph distance (Frishman and Tal 2008) with a horizon. Measured over
+  the generated families (12 seeds each at 60, 120 and 200 nodes, 5% added, 120 × 40 cells),
+  among options weighed in one sitting: every survivor free kept 38% to 56% within two cells
+  (F) on average and 2% in the worst run, and moved 25% to 46% of an unchanged graph's nodes
+  past two cells; a uniform tether to the old place trades one for the other (at 1, F 78% to
+  82%; at 10, 93% to 96%, but the new nodes' neighbors were left 5.6 to 8.9 world units from
+  where their forces balance, measured as force over stiffness, against 0.1 to 0.3 with the
+  reach); letting merged islands slide as rigid bodies made F worse; the reach kept F at 92%
+  (pooled; worst run 79%) with every unchanged rerun at 100%. (The comparisons ran on an
+  earlier, undamped version of the step; the final numbers below are on the damped one.) Who moves: 44% to 47% of the new
+  nodes' direct neighbors move more than two cells, 1% to 3% at two hops, none beyond, so F's
+  remainder is the reassessment itself. Reassessment, as the net force on a new node's
+  neighbors where they end over the force had they stayed put: 0.04 to 0.1 over the suite,
+  and 0.06 in the reassessment test, where the step 3 stopgap left 0.81. A resize scales the old layout about its centroid by the ratio of base
+  distances (the equilibrium when every force scales with distance), then relaxes it cold with
+  every node free, no tether, islands packed again and the ring placed again. Unratified: the
+  reach and tether values, and that a merged island's far side holds (two islands a new node
+  joins stay apart, on a stretched edge, rather than being drawn together).
+- **M2: the simulation steps by damped Jacobi under an adaptive temperature,** departing from
+  plan §8.1's kept "displacement `min(‖F‖, T)`" and multiplicative cooling. The seed's
+  schedule (span / 2, × 0.95 a step) drops below `converge_eps` near step 94, so a cold run
+  stopped frozen, not at equilibrium (500 or 2000 iterations changed nothing), and a warm
+  restart relaxed everything at once: the reason step 3 had to freeze survivors. Moving a body
+  its whole force overshoots whenever it is stiffer than 2, which one spring with its other
+  end free already is. Now a body moves `F / max(D, 1)`, capped by the temperature, with `D` a
+  Gershgorin bound on its force's Jacobian: twice the stiffness of its springs (`2wd / k`),
+  repulsion (`k² / d²`) and gravity, plus its tether's. With `D` only once, two free bodies
+  on a spring oscillate forever at a factor of −1 (a test caught it); doubled, a step never
+  overshoots, and a body whose forces balance stays put however hot the run. The temperature
+  follows Hu (2005): `× cooling` after a step that raised the total squared force, `÷
+  cooling` after five in a row that lowered it. Defaults unchanged. Cost, release on this
+  container, median of 7 × 12 seeds, against the stopgap in one sitting: cold 200 nodes /
+  ~320 edges 9.9 ms (was 7.7), warm 3.1 ms (was 5.3; holds skip most of the work), cold 1,000
+  / ~1,650 105 ms (was 82): within §15.1's 50, 10 and 400 ms. Unratified.
+- **M2: each node has its own ideal distance,** `kᵢ = √(area / core size) × max(widthᵢ / 4,
+  1)` with `k_label_scale` on, and a pair rests at `√(kᵢ kⱼ)`. Plan §8.1 scales one `k` by the
+  average label width, so a level change that widens some boxes would rescale every distance;
+  per node, a widened box pushes harder and its neighbors make room (the level test: they move
+  out by 36 world units for a box 31 columns wider), and nodes past the reach hold. The base
+  is recomputed every run, so a topology change that grows the core shrinks every ideal
+  distance slightly; held nodes keep the old scale until a resize or a change reaches them.
+  Unratified.
+- **M2: invariant F is read over the suite, not run by run.** Plan §11.3 states it as
+  statistical over a seeded fixture suite; step 3 had asserted it per run, which only frozen
+  survivors could meet. With reassessment, a run whose new nodes neighbor many survivors keeps
+  less (the worst of 24 keeps 79%), so the test pools all 24 runs' survivors: 1890 of 2053,
+  92.1%, against 90%. The threshold is unchanged. Unratified: the owner may want a per-run
+  floor as well.
 - **M2 step 3: the generated families (plan §20) are `fixtures::generated(seed, n)`.** One
   `SplitMix64` stream (checked against Vigna's reference outputs) draws, in order: each node's
   group (one in twenty ungrouped, the rest in contiguous groups of about 12), label (one to
@@ -579,10 +617,11 @@ Plan §19, in the six steps of `## Now`, each green on its own. The milestone cl
   'a_warm_relayout_after_five_percent_additions_keeps_nine_in_ten_survivors_within_two_cells\|weighted_bodies_at_theta_zero_match_the_weighted_brute_force_sum\|iterations_are_honored_as_given\|the_starting_circle_is_round\|degree_scaled_repulsion_weights_each_pair_by_both_masses\|islands_pack_left_to_right_largest_first\|isolated_nodes_ring_the_core'
   | grep -qx 7 && cargo test -p catena -- layout::force && cargo test -p catena-testkit generated
   && test -z "$(git ls-files seed/graph/layout_fr.rs seed/graph/layout_fr_tests.rs)"`
-- [ ] **Relayout per the owner's ruling** (`owner-rulings.md`, "Relayout"; the plan is under
-  `## Now`) — survivors near a topology change move as the forces say (no blanket cap), a level
-  change relayouts locally around the reshaped nodes, a resize relayouts every node; within the
-  §15.1 budgets, measured. The three tests named below are written red first.
+- [x] **Relayout per the owner's ruling** (`owner-rulings.md`, "Relayout") — survivors near a
+  topology change move as the forces say (no blanket cap), a level change relayouts locally
+  around the reshaped nodes, a resize relayouts every node; within the §15.1 budgets,
+  measured (the decisions above). The three tests named below were watched red against the
+  old engine behind the new `Change` API.
   verify: `cargo test -p catena -- --list | grep -c
   'new_nodes_lead_their_neighbors_to_be_reassessed\|a_level_change_moves_only_nodes_near_reshaped_ones\|a_resize_relays_out_every_node'
   | grep -qx 3 && cargo test -p catena -- layout::force && ! grep -rn "settle" catena/src/layout/force/simulation.rs`
@@ -669,10 +708,22 @@ Each `verify:` lists the named tests first, because a test filter that matches n
   M4, M5); the `expect`s announce themselves, the `fmath` `allow` will not. M2 step 2 removed
   `raster::text`'s and narrowed `geometry::zoom`'s to `MIN_ZOOM`, `MAX_ZOOM` and
   `SemanticZoomTable::new` (step 4), with `ResolvedMetrics::{level, form, set_level}` waiting on
-  steps 3 to 5. M2 step 3 moved the quadtree's onto `layout::force`'s `engine`, `ring` and
-  `simulation` modules, which go live with step 4's wiring.
+  steps 3 to 5. M2 step 3 moved the quadtree's onto `layout::force`'s `engine`, `mobility`,
+  `ring` and `simulation` modules, which go live with step 4's wiring.
   verify: `! grep -rn "dead_code" catena/src`
 
+- [ ] **Fit the islands and the ring to the frame (needs the owner: plan §8.2)** — the
+  generated families lay out about ten times wider than the frame: at 120 × 40 cells the
+  `Fit::Contain` scale is 0.04 to 0.11, because islands pack in one row (§8.2: "left to
+  right") and the ring circles that strip, so a ring of a few nodes sets a square bounding box
+  around a long thin core. It also bounds what a resize can do: the force layout is isotropic
+  and scale-free, so its shape ignores the frame's aspect, and a resize relayout (owner: "use
+  the space properly") mostly relaxes the tension local relayouts left behind. Options: pack
+  islands in shelves toward the frame's aspect; an elliptical ring; gravity stronger along the
+  frame's short axis (for a log-repelling cloud in an anisotropic harmonic trap the envelope's
+  axes go as the inverse ratio of the gravities). verify: `cargo test -p catena --
+  layout::force::engine::tests::islands_fill_the_frame` (a generated family at 120 × 40 cells
+  laid out at a `Fit::Contain` scale of at least 0.5)
 - [ ] **The `png` gallery (plan §16.4)** — `catena-testkit`'s `png` feature: `resvg`
   rasterizes `grid_to_svg` into a non-gating `tests/gallery/*.png`, regenerated on demand. Lands
   once scenes render (M3 at the latest, with the demo); check `resvg`'s `rust-version` against

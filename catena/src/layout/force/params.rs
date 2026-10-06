@@ -26,7 +26,9 @@ pub struct ForceParams {
     pub iterations: u32,
     /// Steps of a warm relayout; 50, the seed orchestrator's budget.
     pub warm_iterations: u32,
-    /// The temperature's multiplier per step; 0.95.
+    /// How the temperature, the longest step a node may take, follows the run (Hu 2005): it
+    /// is multiplied by this after a step that raised the total squared force, and divided by
+    /// it after five steps in a row that lowered it; 0.95.
     pub cooling: f64,
     /// The pull toward the running centroid, per unit of distance; 0.10.
     pub gravity: f64,
@@ -44,6 +46,16 @@ pub struct ForceParams {
     pub k_label_scale: bool,
     /// Steps over which a node new to a warm layout ramps its force from 0 to full; 10.
     pub ramp_in_iterations: u32,
+    /// How far, in hops along layout edges, a relayout reaches from what changed (a node
+    /// added, its box reshaped, an edge gained or lost). Nodes beyond it hold their places;
+    /// nodes within it move as their forces say, tethered to where they were; 2.
+    pub tether_reach: u32,
+    /// The tether on a node within one hop of a change, so its forces, not its old place,
+    /// decide where it goes; 0.1.
+    pub tether_near: f64,
+    /// The tether on a node `tether_reach` hops from a change; between one hop and the reach
+    /// the tether grows linearly from `tether_near` to this; 30.
+    pub tether_far: f64,
 }
 
 impl Default for ForceParams {
@@ -67,6 +79,9 @@ impl ForceParams {
             converge_eps: 0.5,
             k_label_scale: true,
             ramp_in_iterations: 10,
+            tether_reach: 2,
+            tether_near: 0.1,
+            tether_far: 30.0,
         }
     }
 
@@ -98,6 +113,8 @@ impl ForceParams {
             gravity: finite(self.gravity, defaults.gravity),
             theta: finite(self.theta, defaults.theta),
             converge_eps: finite(self.converge_eps, defaults.converge_eps),
+            tether_near: finite(self.tether_near, defaults.tether_near),
+            tether_far: finite(self.tether_far, defaults.tether_far),
             ..self.clone()
         }
     }

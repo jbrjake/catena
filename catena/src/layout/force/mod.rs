@@ -9,6 +9,14 @@
     )
 )]
 mod engine;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "GraphView runs the force layout once the viewport lands (M2 step 4)"
+    )
+)]
+mod mobility;
 mod params;
 mod quadtree;
 #[cfg_attr(

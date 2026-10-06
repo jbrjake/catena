@@ -8,14 +8,23 @@
 //! or pinned node stays where its simulation leaves it, so a relayout moves no island wholesale.
 //! Every other node goes to the peripheral ring (plan §8.2).
 //!
+//! A relayout follows one [`Change`] (the owner's "Relayout" ruling). After a topology change
+//! or a semantic level change, it reaches `tether_reach` hops from what changed: the nodes
+//! within reach move as their forces say, each tethered to where it was, loosely next to the
+//! change and firmly at the edge of the reach, and every node beyond holds its place (see
+//! [`mobility`]). After a resize every node is free, and islands and ring are placed afresh.
+//!
 //! Everything iterates in the store's canonical order, so the result depends on the graph alone,
 //! never on insertion order or slot numbers.
 
 use std::collections::BTreeSet;
 
+use super::mobility::{self, Mobility};
 use super::params::ForceParams;
 use super::ring::{self, Placed, RingNode};
-use super::simulation::{Body, Spring, centroid, ideal_distance, simulate};
+use super::simulation::{
+    Body, Schedule, Spring, base_distance, centroid, ideal_distance, simulate,
+};
 use crate::fmath;
 use crate::geometry::ResolvedMetrics;
 use crate::graph::{GraphStore, Key, NodeIx};
@@ -33,40 +42,77 @@ pub(crate) struct Frame {
     pub(crate) cell_aspect: f64,
 }
 
-/// Lays out every node of `store` and writes each one's world position (its center) into
-/// `positions`, by slot; a vacant slot gets `None`.
+/// What a relayout follows (plan §6, as the owner's "Relayout" ruling amends it).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum Change<'a> {
+    /// Nodes or edges came or went, and these slots hold nodes new to the layout. A first
+    /// layout is one whose every node is new.
+    Topology(&'a BTreeSet<NodeIx>),
+    /// The semantic zoom level changed, and these nodes' boxes collapsed or expanded with it.
+    Level(&'a BTreeSet<NodeIx>),
+    /// The frame changed size.
+    Resize,
+}
+
+/// What the force layout keeps from one run to the next.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct ForceState {
+    /// Per slot, its node's world position (its center); `None` for a vacant slot.
+    pub(crate) positions: Vec<Option<(f64, f64)>>,
+    /// Per slot, its node's neighbors along layout edges, sorted, when it was last laid out:
+    /// what tells a topology relayout which survivors gained or lost an edge.
+    pub(super) neighbors: Vec<Vec<NodeIx>>,
+    /// The base ideal distance of the last run, which a resize scales the layout by.
+    pub(super) base: Option<f64>,
+}
+
+/// Lays out every node of `store` after `change` and writes each one's world position (its
+/// center) into `state`, by slot; a vacant slot gets `None`.
 ///
-/// What `positions` held is the previous layout: a node there starts warm, except one in
-/// `added`, whose slot is new to it. A pinned node sits at its pin.
+/// What `state` held is the previous layout. A node new to it, or one that had no layout edge
+/// and now has, starts beside its neighbors; the rest start where they were and move as
+/// [`mobility`] allows. A pinned node sits at its pin.
 pub(crate) fn lay_out<K: Key>(
     params: &ForceParams,
     store: &GraphStore<K>,
     metrics: &ResolvedMetrics,
     frame: Frame,
-    added: &BTreeSet<NodeIx>,
-    positions: &mut Vec<Option<(f64, f64)>>,
+    change: Change<'_>,
+    state: &mut ForceState,
 ) {
-    let graph = Graph::of(store, metrics, frame, added, positions);
-    positions.clear();
-    positions.resize(store.nodes.len(), None);
+    let params = params.sanitized();
+    let mut graph = Graph::of(store, metrics, frame);
+    let base = graph.scale(&params, frame.area);
+    let starts = mobility::starts(&params, &graph.view(), change, state, base);
+    graph.previous = starts.previous;
+    graph.mobility = starts.mobility;
+    let resize = change == Change::Resize;
+
     let n = graph.order.len();
     let mut at = vec![(0.0, 0.0); n];
-
     let islands = graph.islands();
-    let core_widths: Vec<f64> = islands.iter().flatten().map(|&i| graph.size[i].0).collect();
-    let k = ideal_distance(params, frame.area, &core_widths);
     let mut placed_box: Option<Bounds> = None;
     let mut free = Vec::new();
     for island in &islands {
         let (bodies, springs) = graph.bodies(island);
-        let result = simulate(params, &bodies, &springs, k, frame.area);
-        for (&i, &p) in island.iter().zip(&result) {
-            at[i] = p;
+        let placed = bodies.iter().any(|b| b.previous.is_some());
+        if bodies.iter().all(|b| b.pin.is_some()) {
+            for (&i, b) in island.iter().zip(&bodies) {
+                at[i] = b.pin.unwrap_or_default();
+            }
+        } else {
+            let schedule = if placed && !resize {
+                Schedule::Warm
+            } else {
+                Schedule::Cold
+            };
+            let result = simulate(&params, &bodies, &springs, frame.area, schedule);
+            for (&i, &p) in island.iter().zip(&result) {
+                at[i] = p;
+            }
         }
-        if bodies
-            .iter()
-            .any(|b| b.pin.is_some() || b.previous.is_some())
-        {
+        let pinned = island.iter().any(|&i| graph.pin[i].is_some());
+        if pinned || (placed && !resize) {
             placed_box = Bounds::union(placed_box, graph.bounds(island, &at));
         } else {
             free.push(island);
@@ -86,10 +132,16 @@ pub(crate) fn lay_out<K: Key>(
         cursor += b.x1 - b.x0 + GUTTER;
     }
 
-    graph.ring(&islands, &mut at);
+    graph.ring(&islands, &mut at, resize);
+    state.positions.clear();
+    state.positions.resize(store.nodes.len(), None);
+    state.neighbors.clear();
+    state.neighbors.resize(store.nodes.len(), Vec::new());
     for (i, &ix) in graph.order.iter().enumerate() {
-        positions[ix.slot()] = Some(at[i]);
+        state.positions[ix.slot()] = Some(at[i]);
+        state.neighbors[ix.slot()] = graph.neighbor_keys(i);
     }
+    state.base = Some(base);
 }
 
 /// The graph as the layout sees it, every per-node vector in canonical order.
@@ -102,19 +154,21 @@ struct Graph<'s, K> {
     degree: Vec<u32>,
     /// Layout edges between distinct nodes, by place, with their weights.
     springs: Vec<(usize, usize, f64)>,
+    /// Per node, its neighbors along `springs`, by place, sorted and distinct.
+    adjacent: Vec<Vec<usize>>,
     pin: Vec<Option<(f64, f64)>>,
+    /// Per node, its ideal distance in this run.
+    ideal: Vec<f64>,
+    /// Per node, where it starts (see [`mobility::starts`]).
     previous: Vec<Option<(f64, f64)>>,
+    mobility: Vec<Mobility>,
 }
 
 impl<'s, K: Key> Graph<'s, K> {
-    fn of(
-        store: &'s GraphStore<K>,
-        metrics: &ResolvedMetrics,
-        frame: Frame,
-        added: &BTreeSet<NodeIx>,
-        positions: &[Option<(f64, f64)>],
-    ) -> Self {
+    /// The graph of `store`, with every node new to the layout.
+    fn of(store: &'s GraphStore<K>, metrics: &ResolvedMetrics, frame: Frame) -> Self {
         let order = store.nodes_in_order();
+        let n = order.len();
         let mut local = vec![usize::MAX; store.nodes.len()];
         for (i, ix) in order.iter().enumerate() {
             local[ix.slot()] = i;
@@ -132,8 +186,9 @@ impl<'s, K: Key> Graph<'s, K> {
                 })
             })
             .collect();
-        let mut degree = vec![0u32; order.len()];
+        let mut degree = vec![0u32; n];
         let mut springs = Vec::new();
+        let mut adjacent = vec![Vec::new(); n];
         for &e in store.edges_in_order() {
             let Some(edge) = store.edge(e) else { continue };
             if !edge.spec.layout_participating || edge.from == edge.to {
@@ -143,22 +198,16 @@ impl<'s, K: Key> Graph<'s, K> {
             springs.push((a, b, f64::from(edge.spec.weight)));
             degree[a] = degree[a].saturating_add(1);
             degree[b] = degree[b].saturating_add(1);
+            adjacent[a].push(b);
+            adjacent[b].push(a);
         }
-        let spec = |ix: NodeIx| store.node(ix).map(|node| &node.spec);
+        for list in &mut adjacent {
+            list.sort_unstable();
+            list.dedup();
+        }
         let pin = order
             .iter()
-            .map(|&ix| spec(ix).and_then(|s| s.pinned))
-            .collect();
-        let previous = order
-            .iter()
-            .map(|&ix| {
-                let fresh = added.contains(&ix);
-                positions
-                    .get(ix.slot())
-                    .copied()
-                    .flatten()
-                    .filter(|_| !fresh)
-            })
+            .map(|&ix| store.node(ix).and_then(|node| node.spec.pinned))
             .collect();
         Graph {
             store,
@@ -167,9 +216,38 @@ impl<'s, K: Key> Graph<'s, K> {
             size,
             degree,
             springs,
+            adjacent,
             pin,
-            previous,
+            ideal: vec![1.0; n],
+            previous: vec![None; n],
+            mobility: vec![Mobility::Tethered(0.0); n],
         }
+    }
+
+    /// What [`mobility::starts`] reads.
+    fn view(&self) -> mobility::View<'_> {
+        mobility::View {
+            order: self.order,
+            adjacent: &self.adjacent,
+        }
+    }
+
+    /// Sets each node's ideal distance for a layout over `area`, and returns the base
+    /// distance they scale.
+    fn scale(&mut self, params: &ForceParams, area: (f64, f64)) -> f64 {
+        let core = self.degree.iter().filter(|&&d| d > 0).count();
+        let base = base_distance(area, core);
+        self.ideal = self
+            .size
+            .iter()
+            .map(|&(width, _)| ideal_distance(params, base, width))
+            .collect();
+        base
+    }
+
+    /// Node `i`'s layout neighbors, as [`ForceState`] keeps them.
+    fn neighbor_keys(&self, i: usize) -> Vec<NodeIx> {
+        self.view().neighbor_keys(i)
     }
 
     /// The core's connected components, each in canonical order, largest first and then by
@@ -202,7 +280,8 @@ impl<'s, K: Key> Graph<'s, K> {
         islands
     }
 
-    /// The simulation's bodies and springs for `island`, indexed within it.
+    /// The simulation's bodies and springs for `island`, indexed within it. A held node is
+    /// pinned where it was.
     fn bodies(&self, island: &[usize]) -> (Vec<Body>, Vec<Spring>) {
         let mut within = vec![usize::MAX; self.order.len()];
         for (j, &i) in island.iter().enumerate() {
@@ -210,15 +289,23 @@ impl<'s, K: Key> Graph<'s, K> {
         }
         let bodies = island
             .iter()
-            .map(|&i| Body {
-                size: self.size[i],
-                weight: self
-                    .store
-                    .node(self.order[i])
-                    .map_or(1.0, |node| f64::from(node.spec.weight)),
-                degree: self.degree[i],
-                pin: self.pin[i],
-                previous: self.previous[i],
+            .map(|&i| {
+                let held = self.mobility[i] == Mobility::Held;
+                Body {
+                    size: self.size[i],
+                    weight: self
+                        .store
+                        .node(self.order[i])
+                        .map_or(1.0, |node| f64::from(node.spec.weight)),
+                    degree: self.degree[i],
+                    ideal: self.ideal[i],
+                    pin: self.pin[i].or(self.previous[i].filter(|_| held)),
+                    previous: self.previous[i],
+                    tether: match self.mobility[i] {
+                        Mobility::Tethered(tether) => tether,
+                        Mobility::Held => 0.0,
+                    },
+                }
             })
             .collect();
         let springs = self
@@ -247,9 +334,9 @@ impl<'s, K: Key> Graph<'s, K> {
         })
     }
 
-    /// Places every node outside the core: at its pin, where it was, or, new, on the ring
-    /// around the core, turned toward its neighbors there.
-    fn ring(&self, islands: &[Vec<usize>], at: &mut [(f64, f64)]) {
+    /// Places every node outside the core: at its pin, where it was, or, new or after a
+    /// resize, on the ring around the core, turned toward its neighbors there.
+    fn ring(&self, islands: &[Vec<usize>], at: &mut [(f64, f64)], resize: bool) {
         let outside: Vec<usize> = (0..self.order.len())
             .filter(|&i| self.degree[i] == 0)
             .collect();
@@ -266,7 +353,7 @@ impl<'s, K: Key> Graph<'s, K> {
 
         let mut fresh = Vec::new();
         for &i in &outside {
-            match self.pin[i].or(self.previous[i]) {
+            match self.pin[i].or(self.previous[i].filter(|_| !resize)) {
                 Some(p) => at[i] = p,
                 None => fresh.push(i),
             }
@@ -346,3 +433,7 @@ mod tests;
 #[cfg(test)]
 #[path = "stability_tests.rs"]
 mod stability_tests;
+
+#[cfg(test)]
+#[path = "relayout_tests.rs"]
+mod relayout_tests;
