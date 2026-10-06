@@ -108,6 +108,50 @@ fn newlines_start_new_lines() {
     );
 }
 
+fn cells(text: &str) -> Vec<(&str, u16)> {
+    text_cells(text).map(|c| (c.symbol, c.width)).collect()
+}
+
+#[test]
+fn each_char_of_width_one_or_two_starts_a_cell() {
+    assert_eq!(cells(""), []);
+    assert_eq!(cells("ab"), [("a", 1), ("b", 1)]);
+    assert_eq!(cells("日本x"), [("日", 2), ("本", 2), ("x", 1)]);
+}
+
+#[test]
+fn zero_width_chars_join_the_cell_before_them() {
+    assert_eq!(
+        cells("e\u{301}\u{302}x"),
+        [("e\u{301}\u{302}", 1), ("x", 1)]
+    );
+    assert_eq!(
+        cells("👨\u{200d}👩"),
+        [("👨\u{200d}", 2), ("👩", 2)],
+        "a ZWJ sequence measures as the sum of its parts"
+    );
+}
+
+#[test]
+fn a_leading_zero_width_char_is_dropped() {
+    assert_eq!(cells("\u{301}a"), [("a", 1)]);
+    assert_eq!(cells("\u{200d}\u{301}"), []);
+}
+
+#[test]
+fn control_chars_are_dropped_and_end_the_cell_before_them() {
+    assert_eq!(
+        cells("a\nb\x1b[1m"),
+        [("a", 1), ("b", 1), ("[", 1), ("1", 1), ("m", 1)]
+    );
+    assert_eq!(
+        cells("a\u{7}\u{301}b"),
+        [("a", 1), ("b", 1)],
+        "a mark after a control has no cell to join"
+    );
+    assert_eq!(cells("\0\t\r\u{7f}\u{85}"), []);
+}
+
 #[test]
 fn display_width_sums_unicode_widths() {
     assert_eq!(display_width(""), 0);
@@ -151,6 +195,27 @@ fn awkward_text() -> impl Strategy<Value = String> {
     prop::collection::vec(piece, 0..24).prop_map(|pieces| pieces.concat())
 }
 
+/// The §7.1 rule applied char by char into owned strings: the oracle for `text_cells`.
+fn cells_by_rule(text: &str) -> Vec<(String, u16)> {
+    let mut cells: Vec<(String, u16)> = Vec::new();
+    let mut open = false;
+    for c in text.chars() {
+        match c.width() {
+            None => open = false,
+            Some(0) => {
+                if open {
+                    cells.last_mut().expect("an open cell exists").0.push(c);
+                }
+            }
+            Some(w) => {
+                cells.push((c.to_string(), u16::try_from(w).expect("1 or 2")));
+                open = true;
+            }
+        }
+    }
+    cells
+}
+
 /// The text's characters other than whitespace, minus any too wide for `width`.
 fn kept_chars(text: &str, width: usize) -> String {
     text.chars()
@@ -160,6 +225,17 @@ fn kept_chars(text: &str, width: usize) -> String {
 
 proptest! {
     #![proptest_config(config())]
+
+    #[test]
+    fn text_cells_follow_the_rule_and_measure_as_display_width(text in awkward_text()) {
+        let split: Vec<(String, u16)> =
+            text_cells(&text).map(|c| (c.symbol.to_string(), c.width)).collect();
+        let oracle = cells_by_rule(&text);
+        prop_assert_eq!(split.len(), oracle.len());
+        prop_assert_eq!(&split, &oracle);
+        let columns: usize = split.iter().map(|&(_, w)| usize::from(w)).sum();
+        prop_assert_eq!(columns, display_width(&text));
+    }
 
     #[test]
     fn every_line_fits_and_no_visible_text_is_lost(text in awkward_text(), width in 0usize..12) {

@@ -5,27 +5,43 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**M0 is closed; M1 (raster + scene, plan §19) is next.** A1 and A2 of the owner's course
-correction are done; A3 lands in M1's scene, A4 with the M3 key table and the radial view. The
-owner's crates.io name reservation is recommended before M1 lands (plan §0); it does not block
-the work. M1 in this order, each step green on its own:
-
-1. `Surface`, `CellStyle`, `PaletteColor`, `Attrs` and the in-memory `CellGrid` (`cell`,
-   `to_string`, `to_ansi_string`) in `catena/src/raster/`, with the §7.1 text-cell rule
-   (width-0 chars join the cell before them, a leading one is dropped, a width-2 symbol owns a
-   continuation cell).
-2. Port `catena-testkit/src/svg.seed.rs` and `svg_snapshots.seed.rs` onto `CellGrid` as
-   `catena-testkit/src/svg.rs` (`sha2` enters then): T3 live, with a committed `.hash` set and a
-   test that perturbs one color and watches T3 fail.
-3. `SubCellCanvas(SUB_W, SUB_H)` generalizing `BrailleCanvas` (taking `u16` dimensions, which
-   closes "Bound canvas allocation"), and the four blitters.
-4. The scene: `SceneGraph`, `SceneItem`, `Layer`, `Payload` (`#[non_exhaustive]`, A3), both
-   `Route` kinds, per-edge routes and shared segments (A3), `CountBadge` (A3), the compositor's
-   OR-merge, the label mask, and clipping with Cohen–Sutherland (which closes "Bound the work of
-   a huge segment"); `insta` and the first T2 goldens.
+**M1 (raster + scene, plan §19), step 2 of 4.** Step 1 (`Surface`, `CellGrid`, the text-cell
+rule) is done. Next: port `catena-testkit/src/svg.seed.rs` and `svg_snapshots.seed.rs` onto
+`CellGrid` as `catena-testkit/src/svg.rs` (`sha2` enters then): T3 live, with a committed
+`.hash` set and a test that perturbs one color and watches T3 fail. Then steps 3 and 4 of the
+M1 section below. The owner's crates.io name reservation is recommended before M1 lands (plan
+§0); it does not block the work.
 
 ## Decisions
 
+- **M1: `Surface::put` writes the first text cell of its symbol and nothing else.** A symbol
+  with no text cell (empty, only zero-width or control characters) writes nothing, so every
+  surface stays total on any `&str`. A control character is dropped and ends the cell before
+  it (plan §7.1 names only width-0 characters); a mark after one is then leading and dropped.
+  `text_cells` is public so the ratatui adapter applies the same split instead of its own.
+- **M1: a style without a background keeps the cell's background,** as ratatui's style patch
+  does, so a glyph drawn over a glow halo keeps the halo and the adapter needs no translation.
+  A write replaces the foreground and the attributes.
+- **M1: a width-2 glyph and its continuation are one unit.** The continuation carries the
+  glyph's style and an empty symbol; patching either half's background patches both; writing
+  over either half blanks the other, keeping its style; a width-2 glyph whose second cell is
+  off the surface is not written. `CellGrid` is a terminal model, so a half glyph is
+  unrepresentable rather than left to the renderer.
+- **M1: `Attrs` uses ratatui's `Modifier` bit values** (bold 0x1, dim 0x2, italic 0x4,
+  reversed 0x40), so T3's `{attrs:x}` hash field reads the same on both sides of the adapter.
+- **M1: `PaletteColor::Ansi` reads only its low four bits,** so an `Ansi` color never emits more
+  than a 16-color SGR code, which is what the `ansi16` theme is for (ledger row 29).
+- **M1: a cell's symbol is 15 inline bytes.** Zero-width followers past that are dropped, which
+  changes no width; it bounds untrusted labels and makes a grid one allocation.
+- **M1: one cell ceiling, `raster::MAX_CELLS` = 2²² (2048 × 2048).** A larger `CellGrid` keeps its
+  width and loses rows from the bottom (65 535 columns get 64 rows); step 3's `SubCellCanvas`
+  takes the same bound, which closes "Bound canvas allocation".
+- **M1: `CellGrid`'s text forms trim trailing blanks.** `to_string` (via `Display`, since clippy
+  denies an inherent `to_string`) trims trailing spaces per row and joins rows with `\n`, the
+  seed's `render_to_string` pattern; `to_ansi_string` trims trailing cells that show nothing (a
+  space with no background and not reversed), emits one `ESC[0;…m` per style change (attributes,
+  then foreground, then background) and resets at the end of a styled row. A cell's foreground
+  is `None` until written, the terminal's default.
 - **Gates run on the newest stable rustc; CI keeps `toolchain: stable`.** Owner: "just update to
   rust 1.99 so you match latest stable so you don't have conflicts with gh ci." So CI is not
   pinned (plan §17's `check` is "× stable"), and a session switches its local default to the
@@ -193,6 +209,34 @@ the work. M1 in this order, each step green on its own:
   seed/graph/tree_layout.rs seed/graph/tree_layout_tests.rs seed/fixtures seed/tests/visual)" &&
   test -f CONTRIBUTING.md -a -f TODO.md && grep -q Signed-off-by .github/workflows/*.yml`
 
+## M1 — Raster + scene
+
+Plan §19, in four steps, each green on its own. The milestone closes on its own `verify:` below.
+
+- [x] **Step 1: `Surface` and `CellGrid`** — `Surface`, `CellStyle`, `PaletteColor`, `Attrs`,
+  `CellGrid` (`cell`, `to_string`, `to_ansi_string`) and `text_cells`, the §7.1 text-cell rule.
+  verify: `cargo test -p catena -- --list | grep -c
+  'a_wide_symbol_owns_a_continuation_cell\|text_cells_follow_the_rule_and_measure_as_display_width\|to_ansi_string_emits_sgr_only_where_the_style_changes'
+  | grep -qx 3 && cargo test -p catena raster::`
+- [ ] **Step 2: T3 live** — `catena-testkit/src/svg.rs` from the two staged SVG files, on
+  `CellGrid`; a committed `.hash` set; a test that perturbs one color and watches T3 fail.
+  verify: `cargo test -p catena-testkit svg && test ! -e catena-testkit/src/svg.seed.rs && test
+  -n "$(git ls-files '*.hash')"`
+- [ ] **Step 3: `SubCellCanvas` and the four blitters** — `SubCellCanvas(SUB_W, SUB_H)` replaces
+  `BrailleCanvas`, with `u16` dimensions under `MAX_CELLS`; braille, half-block, sextant and
+  ascii encoders. verify: `cargo test -p catena raster::` with a test per blitter
+- [ ] **Step 4: the scene** — `SceneGraph`, `SceneItem`, `Layer`, `Payload` (A3), both `Route`
+  kinds, per-edge routes and shared segments (A3), `CountBadge` (A3), the compositor's OR-merge,
+  the label mask, Cohen–Sutherland clipping; `insta` and the first T2 goldens.
+  verify: `cargo test -p catena scene:: && cargo insta test --check`
+- [ ] **M1 — Raster + scene** — `Surface`, `CellGrid`, `SubCellCanvas`, four blitters,
+  compositor with OR-merge, label mask, clipping, `SceneGraph` with both `Route` kinds, the
+  §7.1 text-cell rule, the SVG renderer ported onto `CellGrid`; T2 goldens, T3 live; A3's
+  shared-geometry room in the scene.
+  verify: `cargo test -p catena raster:: scene:: && cargo insta test && test ! -e
+  catena-testkit/src/svg.seed.rs` (plus a committed `.hash` set and a test that perturbs one
+  color and watches T3 fail)
+
 ## Course correction (owner rulings A1–A4)
 
 Quoted in full in `docs/design/owner-rulings.md`, with a table of the plan text each overrides.
@@ -267,13 +311,6 @@ Each `verify:` lists the named tests first, because a test filter that matches n
 
 ## Later milestones
 
-- [ ] **M1 — Raster + scene** — `Surface`, `CellGrid`, `SubCellCanvas`, four blitters,
-  compositor with OR-merge, label mask, clipping, `SceneGraph` with both `Route` kinds, the
-  §7.1 text-cell rule, the SVG renderer ported onto `CellGrid`; T2 goldens, T3 live; A3's
-  shared-geometry room in the scene.
-  verify: `cargo test -p catena raster:: scene:: && cargo insta test && test ! -e
-  catena-testkit/src/svg.seed.rs` (plus a committed `.hash` set and a test that perturbs one
-  color and watches T3 fail)
 - [ ] **M2 — Graph model + force layout + viewport** — per plan §19.
   verify: `cargo test -p catena` reports ≥ 200 passing tests, the stability suite and the
   cross-run hash test are green, `./scripts/check-perf.sh` exits 0 and wrote this machine's

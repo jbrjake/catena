@@ -3,7 +3,8 @@
 //! Width is `unicode-width`'s, char by char: a character of width 1 or 2 takes that many
 //! columns, and a width-0 character (a combining mark, a variation selector, a zero-width
 //! joiner) takes none and rides with the character before it. Byte length and char count are
-//! never a width.
+//! never a width. [`text_cells`] splits text into terminal cells by the same measure, so what is
+//! measured is what is drawn.
 
 use unicode_width::UnicodeWidthChar;
 
@@ -17,6 +18,64 @@ pub(crate) fn char_width(c: char) -> usize {
 /// for them can show a gap but never an overrun (plan §7.1).
 pub(crate) fn display_width(text: &str) -> usize {
     text.chars().map(char_width).sum()
+}
+
+/// One terminal cell of text: a character of display width 1 or 2 and the zero-width characters
+/// after it, as [`text_cells`] splits text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextCell<'a> {
+    /// The cell's content, a slice of the split text.
+    pub symbol: &'a str,
+    /// Its display width, 1 or 2.
+    pub width: u16,
+}
+
+/// Splits `text` into terminal cells by the text-cell rule of plan §7.1, with `unicode-width`
+/// alone: each character of width 1 or 2 starts a cell, each width-0 character (a combining
+/// mark, a variation selector, a zero-width joiner) joins the cell before it, and a leading one
+/// is dropped. A control character is dropped too, and ends the cell before it, so a width-0
+/// character right after one is dropped as leading.
+///
+/// The widths sum to the text's display width, `unicode-width`'s char by char, so a label's
+/// measured width and its rendered width agree (invariant N).
+#[must_use]
+pub fn text_cells(text: &str) -> TextCells<'_> {
+    TextCells { rest: text }
+}
+
+/// The iterator [`text_cells`] returns.
+#[derive(Debug, Clone)]
+pub struct TextCells<'a> {
+    rest: &'a str,
+}
+
+impl<'a> Iterator for TextCells<'a> {
+    type Item = TextCell<'a>;
+
+    fn next(&mut self) -> Option<TextCell<'a>> {
+        loop {
+            let mut chars = self.rest.char_indices();
+            let (_, first) = chars.next()?;
+            let width = match first.width() {
+                Some(1) => 1,
+                Some(0) | None => {
+                    self.rest = &self.rest[first.len_utf8()..];
+                    continue;
+                }
+                Some(_) => 2,
+            };
+            let mut end = first.len_utf8();
+            for (at, c) in chars {
+                if c.width() != Some(0) {
+                    break;
+                }
+                end = at + c.len_utf8();
+            }
+            let (symbol, rest) = self.rest.split_at(end);
+            self.rest = rest;
+            return Some(TextCell { symbol, width });
+        }
+    }
 }
 
 /// Word-wrap `text` into lines of at most `width` display columns.
