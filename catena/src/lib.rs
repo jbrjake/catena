@@ -12,5 +12,6 @@
     allow(dead_code, reason = "its callers are layout modules that M2 wires in")
 )]
 mod fmath;
+mod geometry;
 mod layout;
 pub mod raster;

@@ -5,11 +5,12 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-M0 step 4, zoom: `git mv seed/graph/zoom.rs catena/src/geometry/zoom.seed.rs` (commit 1), then
-port (commit 2): the plan §5 thresholds become a configurable `SemanticZoomTable` (defaults
-0.30/0.35/1.5/2.5/3.5 and caps 1/5/14/22/34/unlimited, levels hysteresis-free) returning a
-`SemanticZoom` level, `f64` zoom, and the [0.1, 4.0] clamp from `seed/app/navigation.rs` as
-`MIN_ZOOM`/`MAX_ZOOM`. Keep both seed tests.
+M0 step 4, flex: `git mv seed/ui/flex_layout.rs catena/src/layout/layered/flex.seed.rs`
+(commit 1), then port (commit 2) as `flex.rs`: correct the overflow comment (the first item that
+no longer fits the remainder gets it, later items get zero — red first: a test pinning that
+with the overflow in the middle item), keep all seed tests, and add invariant L (plan §16.2) as
+a property test over random item sets checked against a slow oracle. `proptest` enters the
+workspace as a dev-dependency here.
 
 ## Decisions
 
@@ -97,7 +98,7 @@ port (commit 2): the plan §5 thresholds become a configurable `SemanticZoomTabl
 - [x] **Harvest chord + tests** → `catena/src/layout/radial/`, renamed, index-mapped, through
   `fmath`. verify: `cargo test -p catena chord && test -z "$(git ls-files seed/graph/chord.rs
   seed/graph/chord_tests.rs)"`
-- [ ] **Harvest the zoom table** → `catena/src/geometry/`, configurable, with the clamp constants.
+- [x] **Harvest the zoom table** → `catena/src/geometry/`, configurable, with the clamp constants.
   verify: `cargo test -p catena zoom && test -z "$(git ls-files seed/graph/zoom.rs)"`
 - [ ] **Harvest flex** → `catena/src/layout/layered/flex.rs`, overflow comment corrected and
   pinned. verify: `cargo test -p catena flex && test -z "$(git ls-files seed/ui/flex_layout.rs)"`
