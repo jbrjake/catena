@@ -16,7 +16,8 @@ cargo insta review        # accept T2 golden changes
 CATENA_UPDATE_SNAPSHOTS=1 cargo test -p catena-testkit   # re-baseline T3 hashes
 ```
 
-M0 creates these. Until they exist, plan §19 M0 is the procedure.
+`check-perf.sh` lands at M2, insta and the T3 hashes at M1. Gate on the newest stable rustc, the
+one CI's `check` runs (owner ruling); a container's `stable` can lag, so check `rustc -V`.
 
 ## Overrides
 

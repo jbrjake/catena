@@ -90,7 +90,7 @@ fn community_values_stay_in_their_documented_ranges() {
     for edge in &graph.edges {
         assert!((0.3..=0.95).contains(&edge.weight), "{edge:?}");
     }
-    assert!(!graph.description.is_empty());
+    assert_ne!(graph.description, "");
 }
 
 const MINIMAL: &str = r#"{"description": "d",

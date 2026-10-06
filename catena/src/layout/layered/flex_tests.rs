@@ -76,7 +76,7 @@ fn distribute_single_item() {
 #[test]
 fn distribute_empty() {
     let results = flex_distribute(100, &[]);
-    assert!(results.is_empty());
+    assert_eq!(results, [] as [FlexResult; 0]);
 }
 
 #[test]
@@ -149,7 +149,7 @@ fn center_gaps_items_exceed_space() {
 fn center_gaps_empty() {
     // Empty items returns empty vec.
     let offsets = flex_center_with_gaps(50, &[]);
-    assert!(offsets.is_empty());
+    assert_eq!(offsets, [] as [u16; 0]);
 }
 
 #[test]

@@ -19,7 +19,9 @@ pub(crate) fn cos(x: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    #![expect(
+    // `allow`, not `expect`: clippy 1.99's `float_cmp` no longer fires on these asserts and
+    // earlier releases do, so an expectation is unfulfilled on one side or the other.
+    #![allow(
         clippy::float_cmp,
         reason = "the claim is bit-exact values at the points where they are exactly known"
     )]

@@ -5,7 +5,7 @@ use super::*;
 
 #[test]
 fn word_wrap_empty() {
-    assert!(word_wrap("", 20).is_empty());
+    assert_eq!(word_wrap("", 20), [] as [String; 0]);
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn word_wrap_exact_width() {
 
 #[test]
 fn word_wrap_width_zero_returns_empty() {
-    assert!(word_wrap("hello", 0).is_empty());
+    assert_eq!(word_wrap("hello", 0), [] as [String; 0]);
 }
 
 #[test]

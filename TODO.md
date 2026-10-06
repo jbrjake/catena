@@ -5,23 +5,8 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**CI is red; fix it first.** CI's `stable` moved to rustc 1.99, whose clippy fails the gate where
-1.97 (this container's default) passes. CI run 37498710454 failed `explicit_iter_loop` in
-`quadtree.rs`, now fixed. `cargo +1.99 clippy --workspace --all-targets --all-features
---keep-going -- -D warnings` still reports eight sites (1.99 is installed here as a rustup
-toolchain):
-
-- `clippy::assert_is_empty` (new in 1.99), six sites: `catena/src/layout/layered/flex_tests.rs`
-  (two), `catena/src/raster/text_tests.rs` (two), `catena/tests/catena/raster.rs`,
-  `catena-testkit/tests/catena_testkit/fixtures.rs`.
-- `unfulfilled_lint_expectations`, two sites: the `expect(clippy::float_cmp)` in
-  `catena/src/fmath.rs` and `catena/src/layout/force/quadtree_tests.rs`, which 1.99's
-  `float_cmp` no longer fires on. Use `allow` with the same reason for clippy-lint scopes, since
-  clippy changes across releases.
-
-Decide with the owner whether CI should pin its toolchain (a gate that moves under you is not
-deterministic) or keep `stable` per plan §17 and fix lints as they arrive. Fix the sites either
-way, then confirm green on all three `check` legs.
+**Confirm CI green on rustc 1.99.** The eight clippy-1.99 sites are fixed and `regression.sh`
+passes locally on 1.99; confirm all three `check` legs and `msrv` green on the push.
 
 Then M0's last harvest: `git mv seed/tests/visual/svg_renderer.rs
 catena-testkit/src/svg.seed.rs` and `seed/tests/visual/snapshots.rs
@@ -30,6 +15,12 @@ run the M0 gate's `verify:` and close M0.
 
 ## Decisions
 
+- **Gates run on the newest stable rustc; CI keeps `toolchain: stable`.** Owner: "just update to
+  rust 1.99 so you match latest stable so you don't have conflicts with gh ci." So CI is not
+  pinned (plan §17's `check` is "× stable"), and a session switches its local default to the
+  newest stable before gating (`rustup default 1.99` here, where the image's `stable` is 1.97).
+  A clippy-lint scope that a release can stop firing takes `allow` with its reason, not
+  `expect`, because an unfulfilled expectation fails the gate when clippy's lint set moves.
 - **Only `catena` has a `[[bench]]` target; the other crates set `autobenches = false` and
   declare none.** Plan §3 shows `benches/` only under `catena` and §3.1 says "at most one bench
   target"; an empty bench target would cost a link in every `--all-targets` gate. Until criterion

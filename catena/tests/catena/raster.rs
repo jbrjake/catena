@@ -14,7 +14,7 @@ fn helpers_compile_smoke() {
     let mut c = BrailleCanvas::new(10, 10);
     c.draw_line(0, 0, 9, 9);
     let px = lit_pixels(&c);
-    assert!(!px.is_empty());
+    assert_eq!(px.len(), 10, "a 45° line lights one pixel per step");
     assert_no_duplicates(&px);
     assert_8_connected(&px);
     assert_endpoints_exact(&px, 0, 0, 9, 9);

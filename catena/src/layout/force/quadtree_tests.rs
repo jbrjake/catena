@@ -1,4 +1,5 @@
-#![expect(
+// `allow`, not `expect`: clippy 1.99's `float_cmp` no longer fires here and earlier releases do.
+#![allow(
     clippy::float_cmp,
     reason = "exact zeros, exact body counts and exact centres are the claims under test"
 )]
