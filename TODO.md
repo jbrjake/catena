@@ -5,13 +5,11 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-M0 step 4, chord: `git mv seed/graph/chord.rs` and `chord_tests.rs` to
-`catena/src/layout/radial/chord.seed.rs` and `chord_tests.seed.rs` (commit 1), then port (commit
-2): rename `community` → `group` and `entity` → `node` (`CommunityArc` → `GroupArc`,
-`place_communities` → `place_groups`, ids `i32` → `u32`), route `sin`/`cos` through new
-`fmath::sin`/`fmath::cos` (the tests' `powi(2)` become products), replace the `position()` scan
-in `place_entities` with an index map (red first: a test that a duplicated node index keeps the
-seed's first-occurrence slot), and drop the originating application's name from the header.
+M0 step 4, zoom: `git mv seed/graph/zoom.rs catena/src/geometry/zoom.seed.rs` (commit 1), then
+port (commit 2): the plan §5 thresholds become a configurable `SemanticZoomTable` (defaults
+0.30/0.35/1.5/2.5/3.5 and caps 1/5/14/22/34/unlimited, levels hysteresis-free) returning a
+`SemanticZoom` level, `f64` zoom, and the [0.1, 4.0] clamp from `seed/app/navigation.rs` as
+`MIN_ZOOM`/`MAX_ZOOM`. Keep both seed tests.
 
 ## Decisions
 
@@ -96,7 +94,7 @@ seed's first-occurrence slot), and drop the originating application's name from 
 - [x] **Harvest quadtree** → `catena/src/layout/force/`, with the `MAX_DEPTH` and jitter fixes and
   the force-ratio test tightened to (0.7, 1.4). verify: `cargo test -p catena quadtree && test -z
   "$(git ls-files seed/graph/quadtree.rs)"`
-- [ ] **Harvest chord + tests** → `catena/src/layout/radial/`, renamed, index-mapped, through
+- [x] **Harvest chord + tests** → `catena/src/layout/radial/`, renamed, index-mapped, through
   `fmath`. verify: `cargo test -p catena chord && test -z "$(git ls-files seed/graph/chord.rs
   seed/graph/chord_tests.rs)"`
 - [ ] **Harvest the zoom table** → `catena/src/geometry/`, configurable, with the clamp constants.
@@ -134,6 +132,12 @@ seed's first-occurrence slot), and drop the originating application's name from 
   their product unchecked. M1's `SubCellCanvas` should take terminal-sized `u16` dimensions.
   verify: `cargo test -p catena raster::` with a test that a `u16::MAX`-square canvas request is
   either refused or bounded
+
+- [ ] **Drop the harvest's dead-code attributes once callers land** — the M0 ports are wired
+  to nothing yet, so their modules carry `cfg_attr(not(test), expect(dead_code))`, and `fmath`
+  an `allow` (rustc 1.88 does not report it, 1.97 does). Each goes when its engine lands (M2,
+  M4, M5); the `expect`s announce themselves, the `fmath` `allow` will not.
+  verify: `! grep -rn "dead_code" catena/src`
 
 ## Later milestones
 
