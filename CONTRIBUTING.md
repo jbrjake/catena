@@ -87,6 +87,24 @@ modifications of existing work.
 5. **No other obligations.** The Owner need not use your Contribution. Apart from the
    representations above, you provide it "as is", without warranties of any kind.
 
+## Gates
+
+Turn the git hooks on once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+- `scripts/smoke.sh` is the commit gate, run by `pre-commit`. It runs fmt and
+  `cargo xtask lint` over everything, then clippy and lib tests for the crates the staged diff
+  touches, in under a minute.
+- `scripts/regression.sh` is the push gate, run by `pre-push`, and the body of CI's `check` job.
+  It runs strict clippy, strict rustdoc and every test, ignored ones included.
+- Warnings fail only in these gates' own commands. Never set compiler flags through the
+  environment or `.cargo/config.toml`; each distinct flag set forks `target/` (plan §3.1).
+- On macOS, point `CARGO_TARGET_DIR` (in your shell profile, not in a script) outside
+  `~/Documents` and other Spotlight-indexed folders.
+
 ## Working on the code
 
 - `docs/design/initial-catena-plan.md` is the design authority, and its §21 is ruled. A

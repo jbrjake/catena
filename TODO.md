@@ -5,11 +5,10 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-M0 step 2, second half: write `scripts/smoke.sh` (commit gate: fmt, `cargo xtask lint`, clippy
-and `--lib` tests scoped to the crates the staged diff touches, quiet on success, loud skips)
-and `scripts/regression.sh` (push gate, plan §17), add `.githooks/pre-commit` and
-`.githooks/pre-push`, note `git config core.hooksPath .githooks` in `CONTRIBUTING.md`, and turn
-the hooks on in this clone.
+M0 step 3: write `.github/workflows/ci.yml` with `check` (ubuntu/macos/windows × stable,
+`shell: bash`, runs `scripts/regression.sh`), `msrv` (`cargo msrv verify --manifest-path` per
+published crate; a root-level `verify` cannot read an inherited `rust-version`) and `dco`. Pin
+every `uses:` by full commit SHA. Then push the branch and watch the run.
 
 ## Decisions
 
@@ -76,7 +75,7 @@ the hooks on in this clone.
   §3). verify: `grep -q Signed-off-by CONTRIBUTING.md && grep -qi "license grant" CONTRIBUTING.md`
 - [x] **`cargo xtask lint`** — every §17 rule, each with a planted-violation test.
   verify: `cargo test -p xtask && cargo xtask lint`
-- [ ] **Gates and hooks** — `scripts/smoke.sh`, `scripts/regression.sh`, `.githooks/`; the
+- [x] **Gates and hooks** — `scripts/smoke.sh`, `scripts/regression.sh`, `.githooks/`; the
   `core.hooksPath` setup noted in `CONTRIBUTING.md`. verify: `./scripts/regression.sh`
 - [ ] **CI skeleton** — `check` (linux/macos/windows via `regression.sh`), `msrv`, `dco`; every
   `uses:` pinned by SHA. verify: `grep -q Signed-off-by .github/workflows/*.yml`, plus a green
