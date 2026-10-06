@@ -14,7 +14,7 @@
 
 use super::blit::{self, Blitter, ColorSlot, LineGlyphs, line_direction};
 use super::grid::MAX_CELLS;
-use super::polyline::{PathPixel, Walk, dash, snap};
+use super::polyline::{Clip, PathPixel, Walk, dash, snap};
 use super::{CellStyle, Surface};
 use crate::geometry::curve::{Bezier, tessellate};
 
@@ -191,10 +191,21 @@ impl SubCellCanvas {
         );
     }
 
+    /// The walk of `points`, clipped to this canvas: what lies far off it is skipped, not
+    /// stepped through.
+    fn walk<'a>(&self, points: &'a [(f64, f64)]) -> Walk<'a> {
+        Walk::new(points).clipped_to(self.clip())
+    }
+
+    fn clip(&self) -> Clip {
+        let side = |pixels: usize| i64::try_from(pixels).unwrap_or(i64::MAX);
+        Clip::canvas(side(self.pixel_width()), side(self.pixel_height()))
+    }
+
     /// Draw the polyline through `points` (sub-pixel coordinates; see [`polyline_pixels`]).
-    /// Pixels outside the canvas are silently clipped.
+    /// Pixels outside the canvas are silently clipped, and the walk skips what lies far off it.
     pub fn draw_polyline(&mut self, points: &[(f64, f64)]) {
-        for pixel in Walk::new(points) {
+        for pixel in self.walk(points) {
             self.plot_on(points, pixel);
         }
     }
@@ -204,7 +215,8 @@ impl SubCellCanvas {
     /// pixel and spans within half a pixel step of its length; `dash_on = 0` draws nothing and
     /// `dash_off = 0` draws solid.
     pub fn draw_dashed_polyline(&mut self, points: &[(f64, f64)], dash_on: u32, dash_off: u32) {
-        let mut walk = Walk::measured(points, std::mem::take(&mut self.arc));
+        let mut walk =
+            Walk::measured(points, std::mem::take(&mut self.arc)).clipped_to(self.clip());
         dash(
             &mut walk,
             f64::from(dash_on),
@@ -221,7 +233,7 @@ impl SubCellCanvas {
     /// crosses over this one. The polyline's first and last pixels are always drawn.
     pub fn draw_polyline_with_hops(&mut self, points: &[(f64, f64)], hops: &[(i32, i32, i32)]) {
         let ends = [points.first(), points.last()].map(|p| p.map(|&p| snap(p)));
-        for pixel in Walk::new(points) {
+        for pixel in self.walk(points) {
             let (x, y) = (pixel.x, pixel.y);
             let is_endpoint = ends.contains(&Some((x, y)));
             if is_endpoint || !hops.iter().any(|&hop| in_disc(x, y, hop)) {

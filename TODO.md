@@ -11,8 +11,8 @@ green on its own:
 
 1. ~~Scene types~~ (done): `SceneGraph`, `SceneItem`, `Layer`, `Payload`, both `Route` kinds,
    `EdgeRoute`, shared segments, `CountBadge`, `edges_at` and `route_faults`.
-2. Cohen–Sutherland clipping of segments to the canvas before the walk, keeping dash phase,
-   which closes "Bound the work of a huge segment".
+2. ~~Clipping~~ (done): the canvas clips every walk exactly, which closed "Bound the work of a
+   huge segment".
 3. The compositor: one canvas per layer, OR-merged with the topmost layer's color; `Orthogonal`
    routes drawn as box-drawing glyphs with junctions; the label mask; glow via `patch_bg`.
 4. `insta` and the first T2 goldens of primitive scenes (Ascii blitter), plus T3 scene
@@ -116,6 +116,23 @@ block the work.
   columns it picks braille's right dot column instead of the left. In return a route's cells are
   its vertices' cells rounded, so `Route::bounds` is exact and invariant B compares anchors
   exactly.
+- **M1: segments clip in the walk's integer space, not as Cohen–Sutherland on floats.** Plan
+  §16.2-K wants clipped output equal to unclipped-then-cropped, and clipping the float segment then
+  re-snapping its end moves Bresenham's choices along the whole line. Every walk step moves one
+  pixel along the major axis, so the state after `k` steps has a closed form (minor steps
+  `⌊(2·minor·k + major) / (2·major)⌋`, checked against stepping, ties included, before it was
+  written, and by a property since); a clipped segment starts at its first in-clip step, found from
+  the major-axis bounds and two binary searches on the monotone minor axis, and stops at its
+  last. Arithmetic is `i128`, so the full `i32` range is exact. The canvas clips to itself grown by
+  `CLIP_SLACK` = 256 pixels, so a segment's cost is its stretch near the canvas.
+- **M1: a dash after a clip restarts on the pattern's nominal phase.** The A1 dash algorithm
+  rounds each run to whole pixels and so drifts along a path; there is no closed form for the
+  drift, so a dashed walk that skipped pixels resumes as if every run had been exactly its
+  length, from its exact arc length. Within the slack nothing is skipped and dashes match the
+  unclipped walk exactly (a property checks this); a dashed line whose start lies more than 256
+  pixels off the canvas can shift its phase once, when that start crosses the slack. Axis-aligned
+  integer patterns do not drift, so they match exactly at any distance (a test covers 10 000
+  pixels).
 - **M1: the sextant table is checked against Unicode's character names,** a 60-entry table
   generated from the Unicode 15.1 database (`BLOCK SEXTANT-<cells>`), not against the encoder's
   own arithmetic; `▌`, `▐`, `█` and a space fill the four patterns Unicode encodes elsewhere.
@@ -361,12 +378,13 @@ Each `verify:` lists the named tests first, because a test filter that matches n
 
 ## Found while porting
 
-- [ ] **Bound the work of a huge segment** — since the M0 port, a line spanning the whole `i32`
+- [x] **Bound the work of a huge segment** — since the M0 port, a line spanning the whole `i32`
   range no longer overflows, but the walk then steps all ~4·10⁹ pixels; since A1 the same holds
   for a curve, which used to cost at most 201 samples. Clipping segments to the canvas before
-  rasterizing (plan §6, ledger row 14) fixes both in M1. verify: a test drawing `(i32::MIN, 0)`
-  to `(i32::MAX, 3)` as a line and as a bowed curve on an 8×2 canvas finishes under `cargo test`
-  in < 1 s
+  rasterizing (plan §6, ledger row 14) fixes both in M1. verify: `cargo test -p catena --lib
+  a_segment_across` runs both tests (a line and a bowed curve from `(i32::MIN, 0)` to
+  `(i32::MAX, 3)` on an 8×2 canvas; the walk's pixel count bounded by the canvas plus slack) and
+  reports finishing in < 1 s
 - [x] **Bound canvas allocation** — `BrailleCanvas::new` takes `usize` dimensions and allocates
   their product unchecked. M1's `SubCellCanvas` should take terminal-sized `u16` dimensions.
   verify: `cargo test -p catena raster::blit::tests::a_canvas_request_past_the_cell_ceiling_is_bounded`

@@ -323,3 +323,26 @@ fn primitives_near_the_i32_limits_draw_nothing_on_canvas_and_do_not_overflow() {
     canvas.draw_line(i32::MAX - 2, i32::MIN, i32::MAX, i32::MIN + 2);
     assert_eq!(lit_cells(&canvas), 0);
 }
+
+#[test]
+fn a_segment_across_the_i32_range_draws_only_what_the_canvas_shows() {
+    // Unclipped, each of these walks some 4·10⁹ pixels; clipped, the visible stretch and the
+    // slack around it.
+    let mut line = SubCellCanvas::new(Blitter::Braille, 8, 2);
+    line.draw_line(i32::MIN, 0, i32::MAX, 3);
+    line.draw_dashed_line(i32::MIN, 0, i32::MAX, 3, 1, 1);
+    line.draw_line_with_hops(i32::MIN, 0, i32::MAX, 3, &[(4, 2, 1)]);
+    // At x = 0 the line has risen ⌊(6·2³¹ + M) / 2M⌋ = 2 rows (M = 2³² − 1), and it stays there
+    // across the canvas.
+    let rows: Vec<String> = line
+        .render()
+        .iter()
+        .map(|row| row.iter().collect())
+        .collect();
+    assert_eq!(rows, ["⠤⠤⠤⠤⠤⠤⠤⠤", "⠀⠀⠀⠀⠀⠀⠀⠀"]);
+
+    let mut bowed = SubCellCanvas::new(Blitter::Braille, 8, 2);
+    bowed.draw_bezier(i32::MIN, 0, i32::MAX, 3);
+    bowed.draw_dashed_bezier(i32::MIN, 0, i32::MAX, 3, 2, 2);
+    assert_eq!(lit_cells(&bowed), 0, "the bow passes some 8·10⁸ rows away");
+}
