@@ -58,6 +58,22 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
   node on the cold circle around the origin, so its first steps dragged its neighbors across the
   layout, which ramp-in only softens. The ramp scales what a new body exerts (its repelling mass
   and its springs' pull on others) by `(step + 1) / ramp_in_iterations` until it is whole.
+- **M2 step 3: islands and the ring (plan §8.2).** The core is the nodes joined by a layout
+  edge that is not a self-loop; each connected component is simulated alone with one `k` for
+  the whole core, so all islands share a scale. An island none of whose nodes has a place
+  (previous or pinned) is new: islands are ordered largest first, then by first node, and new
+  ones are packed left to right after the placed ones' box (from x = 0 when none is placed),
+  4 columns apart, centered on the placed ones' middle. A placed island stays where its
+  simulation leaves it, so a relayout never shifts an island wholesale. Every other node rings
+  the core: pinned at its pin, else kept where it was, else placed with the other new ones,
+  evenly, in order of the bearing of its core neighbors along any edge (none last), the first
+  on its own bearing. The radius is `(farthest core corner + 3) · 1.1`, at least the ring's
+  boxes plus 2 each, over 2π. The seed halved the first term (`(max_dist + 3) / 2 · 1.1`)
+  because its core already filled the viewport when the ring was placed, so a ring outside it
+  would have been off screen; here the snapper fits core and ring together afterwards, and the
+  halved ring cut through the core (the ring tests fail with it). The ring is round in world
+  space; the seed squashed its height by half in cells. `lay_out` takes the commit's `added`
+  set, whose slots start fresh even where `positions` still holds a removed node's place.
 - **M2 step 3: coincident bodies do not push each other.** The kernel gives no force within
   1e-4 (the quadtree's coincidence rule, shared by the exact sum), so two free bodies at one
   point part only through other forces. Starting positions make that unlikely; a deterministic
