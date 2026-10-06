@@ -1,17 +1,17 @@
 //! Braille line quality, checked with the testkit's raster oracle (plan §16.2-E). These live in
-//! the integration target because the oracle takes `catena`'s own `BrailleCanvas`, and only
+//! the integration target because the oracle takes `catena`'s own `SubCellCanvas`, and only
 //! here do `catena` and `catena-testkit` share one copy of it.
 
 use std::collections::HashSet;
 
-use catena::raster::BrailleCanvas;
+use catena::raster::{Blitter, SubCellCanvas};
 use catena_testkit::braille_asserts::{
     assert_8_connected, assert_endpoints_exact, assert_no_duplicates, lit_pixels,
 };
 
 #[test]
 fn helpers_compile_smoke() {
-    let mut c = BrailleCanvas::new(10, 10);
+    let mut c = SubCellCanvas::new(Blitter::Braille, 10, 10);
     c.draw_line(0, 0, 9, 9);
     let px = lit_pixels(&c);
     assert_eq!(px.len(), 10, "a 45° line lights one pixel per step");
@@ -29,7 +29,7 @@ fn hop_endpoint_inside_disc_still_draws_endpoint() {
     // Place a hop disc centred exactly on the endpoint (10, 0) with radius 2.
     // All pixels in [8..=10] are inside the disc, so the endpoint pixel at
     // x=10 must still be drawn (endpoints are never suppressed by hops).
-    let mut canvas = BrailleCanvas::new(10, 1);
+    let mut canvas = SubCellCanvas::new(Blitter::Braille, 10, 1);
     canvas.draw_line_with_hops(0, 0, 10, 0, &[(10, 0, 2)]);
     let px = lit_pixels(&canvas);
     let set: HashSet<(usize, usize)> = px.iter().copied().collect();
@@ -41,7 +41,7 @@ fn hop_endpoint_inside_disc_still_draws_endpoint() {
 
 #[test]
 fn line_is_8_connected_horizontal() {
-    let mut c = BrailleCanvas::new(12, 4);
+    let mut c = SubCellCanvas::new(Blitter::Braille, 12, 4);
     c.draw_line(0, 0, 19, 0); // 20 px across row 0
     let px = lit_pixels(&c);
     assert_eq!(
@@ -56,7 +56,7 @@ fn line_is_8_connected_horizontal() {
 
 #[test]
 fn line_is_8_connected_vertical() {
-    let mut c = BrailleCanvas::new(4, 5);
+    let mut c = SubCellCanvas::new(Blitter::Braille, 4, 5);
     c.draw_line(0, 0, 0, 15); // 16 px down col 0
     let px = lit_pixels(&c);
     assert_eq!(px.len(), 16, "vertical line should have 16 distinct pixels");
@@ -67,7 +67,7 @@ fn line_is_8_connected_vertical() {
 
 #[test]
 fn line_is_8_connected_diagonal_45() {
-    let mut c = BrailleCanvas::new(10, 6);
+    let mut c = SubCellCanvas::new(Blitter::Braille, 10, 6);
     c.draw_line(0, 0, 15, 15); // 45° diagonal
     let px = lit_pixels(&c);
     // A 45° Bresenham produces one pixel per step: 16 pixels
@@ -79,7 +79,7 @@ fn line_is_8_connected_diagonal_45() {
 
 #[test]
 fn line_is_8_connected_steep() {
-    let mut c = BrailleCanvas::new(4, 5);
+    let mut c = SubCellCanvas::new(Blitter::Braille, 4, 5);
     c.draw_line(0, 0, 3, 15); // steep: dy >> dx
     let px = lit_pixels(&c);
     assert_8_connected(&px);
@@ -104,7 +104,7 @@ fn line_endpoints_are_exact_all_octants() {
         (cx + 20, cy - 8), // Octant 8: ENE — dx>|dy|>0
     ];
     for &(x1, y1) in endpoints {
-        let mut c = BrailleCanvas::new(22, 22);
+        let mut c = SubCellCanvas::new(Blitter::Braille, 22, 22);
         c.draw_line(cx, cy, x1, y1);
         let px = lit_pixels(&c);
         assert_endpoints_exact(&px, cx, cy, x1, y1);
@@ -114,7 +114,7 @@ fn line_endpoints_are_exact_all_octants() {
 
 #[test]
 fn line_no_duplicates_diagonal() {
-    let mut c = BrailleCanvas::new(10, 6);
+    let mut c = SubCellCanvas::new(Blitter::Braille, 10, 6);
     c.draw_line(2, 0, 19, 11); // off-axis: dx=17, dy=11 (not 45°, not steep)
     let px = lit_pixels(&c);
     assert_no_duplicates(&px);
@@ -128,21 +128,21 @@ fn joined_lines_share_endpoint_pixel() {
     let (ex, ey) = (20i32, 0i32);
 
     // Verify segment A→B individually reaches B
-    let mut c_ab = BrailleCanvas::new(12, 4);
+    let mut c_ab = SubCellCanvas::new(Blitter::Braille, 12, 4);
     c_ab.draw_line(ax, ay, bx, by);
     let px_ab = lit_pixels(&c_ab);
     assert_endpoints_exact(&px_ab, ax, ay, bx, by);
     assert_8_connected(&px_ab);
 
     // Verify segment B→E individually reaches B
-    let mut c_be = BrailleCanvas::new(12, 4);
+    let mut c_be = SubCellCanvas::new(Blitter::Braille, 12, 4);
     c_be.draw_line(bx, by, ex, ey);
     let px_be = lit_pixels(&c_be);
     assert_endpoints_exact(&px_be, bx, by, ex, ey);
     assert_8_connected(&px_be);
 
     // Verify the combined canvas has B lit and the full path is 8-connected
-    let mut c = BrailleCanvas::new(12, 4);
+    let mut c = SubCellCanvas::new(Blitter::Braille, 12, 4);
     c.draw_line(ax, ay, bx, by);
     c.draw_line(bx, by, ex, ey);
     let px = lit_pixels(&c);
@@ -159,10 +159,10 @@ fn dashed_line_on_1_off_0_equals_solid() {
     // dash_on=1, dash_off=0 → period=1, every pixel drawn → identical to draw_line
     let (x0, y0, x1, y1) = (0i32, 0i32, 19i32, 11i32);
 
-    let mut solid = BrailleCanvas::new(12, 4);
+    let mut solid = SubCellCanvas::new(Blitter::Braille, 12, 4);
     solid.draw_line(x0, y0, x1, y1);
 
-    let mut dashed = BrailleCanvas::new(12, 4);
+    let mut dashed = SubCellCanvas::new(Blitter::Braille, 12, 4);
     dashed.draw_dashed_line(x0, y0, x1, y1, 1, 0);
 
     let solid_px: HashSet<_> = lit_pixels(&solid).into_iter().collect();
@@ -182,7 +182,7 @@ fn hop_line_8_connected_outside_hops() {
     // connected (the gap breaks it), but each side IS connected.
     let (hop_x, hop_r) = (20usize, 3usize);
 
-    let mut c = BrailleCanvas::new(22, 2);
+    let mut c = SubCellCanvas::new(Blitter::Braille, 22, 2);
     c.draw_line_with_hops(0, 0, 39, 0, &[(20, 0, 3)]);
 
     let all_px = lit_pixels(&c);
@@ -221,12 +221,12 @@ fn lit_pixels_decodes_the_unicode_dot_numbering() {
     // standard assigns to it, independent of how catena encodes it.
     for y in 0..4 {
         for x in 0..2 {
-            let mut c = BrailleCanvas::new(1, 1);
+            let mut c = SubCellCanvas::new(Blitter::Braille, 1, 1);
             c.set_pixel(x, y);
             assert_eq!(lit_pixels(&c), [(x, y)]);
         }
     }
-    let mut c = BrailleCanvas::new(1, 1);
+    let mut c = SubCellCanvas::new(Blitter::Braille, 1, 1);
     c.set_pixel(1, 3);
     assert_eq!(c.render()[0][0], '\u{2880}', "dot 8 is bit 7");
 }

@@ -9,7 +9,7 @@
 use std::collections::HashSet;
 
 use catena::geometry::curve::{Bezier, tessellate};
-use catena::raster::{BrailleCanvas, polyline_pixels};
+use catena::raster::{Blitter, SubCellCanvas, polyline_pixels};
 use catena_testkit::braille_asserts::{
     assert_8_connected, assert_endpoints_exact, assert_no_duplicates, lit_pixels,
 };
@@ -163,7 +163,7 @@ fn shift(piece: &Bezier, by: Pt) -> Bezier {
 
 /// The chain moved by whole pixels so its control hull (and so the curve) sits at least 2
 /// sub-pixels inside a canvas just big enough to hold it: nothing clips.
-fn on_canvas(chain: &[Bezier]) -> (Vec<Bezier>, BrailleCanvas, BrailleCanvas) {
+fn on_canvas(chain: &[Bezier]) -> (Vec<Bezier>, SubCellCanvas, SubCellCanvas) {
     let all: Vec<Pt> = chain.iter().flat_map(control_points).collect();
     let min_x = all.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
     let min_y = all.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
@@ -178,11 +178,12 @@ fn on_canvas(chain: &[Bezier]) -> (Vec<Bezier>, BrailleCanvas, BrailleCanvas) {
             clippy::cast_sign_loss,
             reason = "a small positive extent"
         )]
-        let n = ((extent + 3.0) / per_cell).ceil() as usize;
+        let n = ((extent + 3.0) / per_cell).ceil() as u16;
         n
     };
     let (w, h) = (cells(max_x, 2.0), cells(max_y, 4.0));
-    (moved, BrailleCanvas::new(w, h), BrailleCanvas::new(w, h))
+    let canvas = || SubCellCanvas::new(Blitter::Braille, w, h);
+    (moved, canvas(), canvas())
 }
 
 fn polyline(chain: &[Bezier]) -> Vec<Pt> {

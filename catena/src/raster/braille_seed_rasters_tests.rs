@@ -2,8 +2,10 @@
 
 use std::collections::HashSet;
 
+use super::SubCellCanvas;
 use super::tests::raster;
-use super::{BRAILLE_BASE, BRAILLE_MAP, BrailleCanvas};
+use crate::raster::Blitter;
+use crate::raster::blit::{BRAILLE_BASE, BRAILLE_MAP};
 
 /// The seed's own output for each primitive, captured from `seed/graph/braille.rs` before the
 /// port as `render()` rows joined by `|`. Folding the three Bresenham loops into one walker moved
@@ -48,7 +50,7 @@ const SEED_RASTERS: [(&str, &str); 33] = [
 
 /// Draws exactly what produced [`SEED_RASTERS`], in the same order.
 fn current_rasters() -> Vec<(String, String)> {
-    let fresh = || BrailleCanvas::new(12, 6);
+    let fresh = || SubCellCanvas::new(Blitter::Braille, 12, 6);
     let mut out = Vec::new();
     let lines = [
         (0, 0, 23, 9),
@@ -187,7 +189,7 @@ fn primitives_keep_the_seed_rasters_where_a1_leaves_them() {
 
 #[test]
 fn the_raster_decoder_reads_back_what_was_drawn() {
-    let mut c = BrailleCanvas::new(3, 2);
+    let mut c = SubCellCanvas::new(Blitter::Braille, 3, 2);
     for (x, y) in [(0, 0), (1, 3), (4, 7), (5, 2)] {
         c.set_pixel(x, y);
     }

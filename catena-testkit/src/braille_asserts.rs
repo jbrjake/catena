@@ -3,7 +3,7 @@
 
 use std::collections::{HashSet, VecDeque};
 
-use catena::raster::BrailleCanvas;
+use catena::raster::{Blitter, SubCellCanvas};
 
 /// Unicode's braille dot numbering, as `(bit, dot_x, dot_y)` within a cell's 2×4 grid, in
 /// row-major order: dots 1, 2, 3 and 7 fill the left column top to bottom, dots 4, 5, 6 and 8
@@ -20,11 +20,20 @@ const DOTS: [(u8, usize, usize); 8] = [
     (7, 1, 3), // dot 8
 ];
 
-/// Decode every lit pixel in the canvas.
+/// Decode every lit pixel in a braille canvas.
 /// Returns `(pixel_x, pixel_y)` pairs in row-major scan order, where
 /// `pixel_x = col * 2 + dot_x` and `pixel_y = row * 4 + dot_y`.
+///
+/// # Panics
+///
+/// If the canvas is not a braille canvas, whose masks this decodes.
 #[must_use]
-pub fn lit_pixels(canvas: &BrailleCanvas) -> Vec<(usize, usize)> {
+pub fn lit_pixels(canvas: &SubCellCanvas) -> Vec<(usize, usize)> {
+    assert_eq!(
+        canvas.blitter(),
+        Blitter::Braille,
+        "lit_pixels decodes braille dots"
+    );
     let mut pixels = Vec::new();
     for row in 0..canvas.cell_rows() {
         for col in 0..canvas.cell_cols() {

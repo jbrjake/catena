@@ -152,12 +152,14 @@ impl ArcLength {
     }
 }
 
-/// One pixel of a polyline's walk and the arc length it sits at (0 when not measured).
+/// One pixel of a polyline's walk, the arc length it sits at (0 when not measured) and the
+/// segment, from `points[segment]` to the next vertex, whose walk lit it.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct PathPixel {
     pub x: i64,
     pub y: i64,
     pub s: f64,
+    pub segment: usize,
 }
 
 /// The pixel walk of a polyline, in path order.
@@ -234,6 +236,7 @@ impl Iterator for Walk<'_> {
                 x: pixel.0,
                 y: pixel.1,
                 s,
+                segment: self.segment,
             });
         }
     }
@@ -247,15 +250,15 @@ pub fn polyline_pixels(points: &[(f64, f64)]) -> impl Iterator<Item = (i64, i64)
 }
 
 /// Runs of `on` then `off` sub-pixels of arc length along a measured walk, starting with a dash,
-/// calling `plot` for each pixel of each dash. A run holds at least one pixel, so a positive
+/// calling `plot` with each pixel of each dash. A run holds at least one pixel, so a positive
 /// length shorter than a pixel step still shows. `on <= 0` draws nothing, `off <= 0` draws
 /// solid, and so does a NaN `off`.
-pub(crate) fn dash(walk: &mut Walk<'_>, on: f64, off: f64, mut plot: impl FnMut(i64, i64)) {
+pub(crate) fn dash(walk: &mut Walk<'_>, on: f64, off: f64, mut plot: impl FnMut(PathPixel)) {
     if on.is_nan() || on <= 0.0 {
         return;
     }
     if off.is_nan() || off <= 0.0 {
-        walk.for_each(|p| plot(p.x, p.y));
+        walk.for_each(plot);
         return;
     }
     let Some(mut here) = walk.next() else {
@@ -271,7 +274,7 @@ pub(crate) fn dash(walk: &mut Walk<'_>, on: f64, off: f64, mut plot: impl FnMut(
     let mut drawing = true;
     loop {
         if drawing {
-            plot(here.x, here.y);
+            plot(here);
         }
         let Some(n) = next else {
             return;

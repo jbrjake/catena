@@ -7,7 +7,7 @@ fn pixels(points: &[(f64, f64)]) -> Vec<(i64, i64)> {
 fn dashed(points: &[(f64, f64)], on: f64, off: f64) -> Vec<(i64, i64)> {
     let mut lit = Vec::new();
     let mut walk = Walk::measured(points, Vec::new());
-    dash(&mut walk, on, off, |x, y| lit.push((x, y)));
+    dash(&mut walk, on, off, |p| lit.push((p.x, p.y)));
     lit
 }
 

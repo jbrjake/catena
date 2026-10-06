@@ -5,12 +5,23 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**M1 (raster + scene, plan §19), step 3 of 4.** Steps 1 (`Surface`, `CellGrid`, the text-cell
-rule) and 2 (T3 live) are done. Next: `SubCellCanvas(SUB_W, SUB_H)` replacing `BrailleCanvas`,
-with `u16` dimensions bounded by `raster::MAX_CELLS` (closing "Bound canvas allocation"), and
-the braille, half-block, sextant and ascii encoders, each blitting into a `Surface`. Then step
-4, the scene. The owner's crates.io name reservation is recommended before M1 lands (plan §0);
-it does not block the work.
+**M1 (raster + scene, plan §19), step 4 of 4: the scene.** Steps 1–3 are done (`Surface` and
+`CellGrid`; T3 live; `SubCellCanvas` and the four blitters). Step 4 lands in this order, each
+green on its own:
+
+1. Scene types in `catena/src/scene/`: `SceneGraph`, `SceneItem`, `Layer`, `Payload`
+   (`#[non_exhaustive]`), both `Route` kinds, the per-edge route (one path or a chain of shared
+   segment ids, each segment carrying its `EdgeIx` set), `CountBadge`; A3's hit-test of a shared
+   segment and invariant B in route terms.
+2. Cohen–Sutherland clipping of segments to the canvas before the walk, keeping dash phase,
+   which closes "Bound the work of a huge segment".
+3. The compositor: one canvas per layer, OR-merged with the topmost layer's color; `Orthogonal`
+   routes drawn as box-drawing glyphs with junctions; the label mask; glow via `patch_bg`.
+4. `insta` and the first T2 goldens of primitive scenes (Ascii blitter), plus T3 scene
+   snapshots; then the M1 milestone `verify:`.
+
+The owner's crates.io name reservation is recommended before M1 lands (plan §0); it does not
+block the work.
 
 ## Decisions
 
@@ -59,6 +70,28 @@ it does not block the work.
   merged `snapshots.rs`), to stay under 500 lines. `sha2` enters with default features off.
 - **M1: the `png` gallery is deferred,** with its own item below. It is non-gating (plan §16.4),
   `resvg` is heavy for every `--all-features` gate leg, and no scene exists yet to look at.
+- **M1: `SubCellCanvas` takes its `Blitter` at run time,** not as const generics, so a host can
+  switch blitters and the frame scratch pools one type. Masks keep each blitter's bit layout:
+  braille in Unicode's dot order (so `get_cell` and the testkit's independent decoder are
+  unchanged), sextant and half block row-major. Per cell it keeps the `ColorSlot(u16)` of the last
+  pen (`set_pen`), one per half for half blocks; `blit` resolves slots through a
+  `Fn(ColorSlot) -> CellStyle`, which is where the scene's style ids will plug in. A half-block
+  cell lit in two styles draws `▀` in the upper foreground over the lower as background, `█` when
+  they match. `render()` still gives braille's blank as U+2800, which the seed characterization
+  needs; other blitters' blank is a space. The seed's integer-coordinate primitives moved to
+  `canvas/integer.rs` unchanged, to keep `canvas.rs` under 500 lines.
+- **M1: the ascii blitter's pixels are line directions.** Plan §7.2 gives it 1×1 sub-resolution
+  and "direction-quantized `─│╱╲` + junction glyphs"; a 1-bit pixel cannot carry a direction, so
+  its mask holds direction bits (horizontal, vertical, rising, falling, dot) and lines crossing
+  in one canvas OR into a junction. A pixel takes the direction of the polyline segment that lit
+  it (circles: the tangent), quantized at 22.5° and 67.5° as drawn on screen, which needs the
+  cell shape: the canvas takes `set_cell_aspect` (default 0.5, the `GridSnapper` default), so the
+  renderer passes the configured one rather than a second constant. Horizontal with vertical, or
+  any mix with a diagonal, is `cross`; the two diagonals are `diagonal_cross`. `LineGlyphs::BOX`
+  and `LineGlyphs::ASCII` are the two sets until §12's `GlyphSet` carries them.
+- **M1: the sextant table is checked against Unicode's character names,** a 60-entry table
+  generated from the Unicode 15.1 database (`BLOCK SEXTANT-<cells>`), not against the encoder's
+  own arithmetic; `▌`, `▐`, `█` and a space fill the four patterns Unicode encodes elsewhere.
 - **Gates run on the newest stable rustc; CI keeps `toolchain: stable`.** Owner: "just update to
   rust 1.99 so you match latest stable so you don't have conflicts with gh ci." So CI is not
   pinned (plan §17's `check` is "× stable"), and a session switches its local default to the
@@ -239,9 +272,11 @@ Plan §19, in four steps, each green on its own. The milestone closes on its own
   `CellGrid`; a committed `.hash` set; a test that perturbs one color and watches T3 fail.
   verify: `cargo test -p catena-testkit svg && test ! -e catena-testkit/src/svg.seed.rs && test
   -n "$(git ls-files '*.hash')"`
-- [ ] **Step 3: `SubCellCanvas` and the four blitters** — `SubCellCanvas(SUB_W, SUB_H)` replaces
+- [x] **Step 3: `SubCellCanvas` and the four blitters** — `SubCellCanvas(SUB_W, SUB_H)` replaces
   `BrailleCanvas`, with `u16` dimensions under `MAX_CELLS`; braille, half-block, sextant and
-  ascii encoders. verify: `cargo test -p catena raster::` with a test per blitter
+  ascii encoders. verify: `cargo test -p catena -- --list | grep -c
+  'braille_glyphs_are_the_dot_pattern_offset_from_u2800\|half_blocks_carry_a_color_per_half\|sextant_glyphs_follow_their_unicode_names\|ascii_lines_draw_as_direction_glyphs_with_a_junction_where_they_cross'
+  | grep -qx 4 && cargo test -p catena raster::`
 - [ ] **Step 4: the scene** — `SceneGraph`, `SceneItem`, `Layer`, `Payload` (A3), both `Route`
   kinds, per-edge routes and shared segments (A3), `CountBadge` (A3), the compositor's OR-merge,
   the label mask, Cohen–Sutherland clipping; `insta` and the first T2 goldens.
@@ -305,10 +340,10 @@ Each `verify:` lists the named tests first, because a test filter that matches n
   rasterizing (plan §6, ledger row 14) fixes both in M1. verify: a test drawing `(i32::MIN, 0)`
   to `(i32::MAX, 3)` as a line and as a bowed curve on an 8×2 canvas finishes under `cargo test`
   in < 1 s
-- [ ] **Bound canvas allocation** — `BrailleCanvas::new` takes `usize` dimensions and allocates
+- [x] **Bound canvas allocation** — `BrailleCanvas::new` takes `usize` dimensions and allocates
   their product unchecked. M1's `SubCellCanvas` should take terminal-sized `u16` dimensions.
-  verify: `cargo test -p catena raster::` with a test that a `u16::MAX`-square canvas request is
-  either refused or bounded
+  verify: `cargo test -p catena raster::blit::tests::a_canvas_request_past_the_cell_ceiling_is_bounded`
+  (bounded to `MAX_CELLS`: 65 535 columns get 64 rows)
 
 - [ ] **Make the tree passes total on any input (M4)** — `compute_subtree_width` and
   `assign_x` recurse once per level, so a chain of ~10⁵ nodes overflows the stack; the BFS has

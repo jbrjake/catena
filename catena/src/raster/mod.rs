@@ -1,7 +1,8 @@
 //! Rasterization: the cell surface, sub-cell canvases, blitters and drawing primitives (plan §7).
 
 mod ansi;
-mod braille;
+mod blit;
+mod canvas;
 mod grid;
 mod polyline;
 mod surface;
@@ -14,7 +15,8 @@ mod surface;
 )]
 mod text;
 
-pub use braille::BrailleCanvas;
+pub use blit::{Blitter, ColorSlot, LineGlyphs};
+pub use canvas::SubCellCanvas;
 pub use grid::{Cell, CellGrid, MAX_CELLS};
 pub use polyline::polyline_pixels;
 pub use surface::{Attrs, CellStyle, PaletteColor, Surface};
