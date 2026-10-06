@@ -348,6 +348,43 @@ fn edge_edits_classify_by_what_they_change() {
 }
 
 #[test]
+fn a_pin_edit_lists_the_node_as_repinned_and_reshaped_only_when_the_marker_flips() {
+    let mut s = with_nodes(&["a", "b"]);
+    let a = s.ix_of(&"a").expect("live");
+    let pin = |s: &mut Store, at: Option<(f64, f64)>| {
+        s.transact(|tx| tx.set_node(&"a", |n| n.pinned = at))
+            .expect("known")
+            .1
+    };
+    let set_pin = pin(&mut s, Some((1.0, 2.0)));
+    assert_eq!(
+        (set_pin.class, set_pin.reshaped, set_pin.repinned),
+        (Some(DeltaClass::Geometry), set(&[a]), set(&[a])),
+        "setting a pin adds the in-box marker"
+    );
+    let moved = pin(&mut s, Some((3.0, 4.0)));
+    assert_eq!(
+        (moved.class, moved.reshaped, moved.repinned),
+        (Some(DeltaClass::Geometry), set(&[]), set(&[a])),
+        "moving one keeps the marker, so the box is as it was"
+    );
+    let cleared = pin(&mut s, None);
+    assert_eq!((cleared.reshaped, cleared.repinned), (set(&[a]), set(&[a])));
+
+    let ((), gone) = s
+        .transact(|tx| {
+            tx.set_node(&"a", |n| n.pinned = Some((5.0, 6.0)))?;
+            tx.remove_node(&"a")
+        })
+        .expect("known");
+    assert!(gone.repinned.is_empty(), "{:?}", gone.repinned);
+    let ((), weighed) = s
+        .transact(|tx| tx.set_node(&"b", |n| n.weight = 2.0))
+        .expect("known");
+    assert!(weighed.repinned.is_empty());
+}
+
+#[test]
 fn reshaped_lists_only_surviving_committed_nodes() {
     let mut s = with_nodes(&["a", "b"]);
     let ((), delta) = s
@@ -368,11 +405,13 @@ fn reshaped_lists_only_surviving_committed_nodes() {
 #[test]
 fn deltas_absorb_in_order() {
     let ix = NodeIx::new;
+    // Each reshaped node is repinned too, so `repinned` follows the same rules.
     let delta = |class, added: &[NodeIx], removed: &[NodeIx], reshaped: &[NodeIx]| Delta {
         class,
         added: set(added),
         removed: set(removed),
         reshaped: set(reshaped),
+        repinned: set(reshaped),
     };
     let mut pending = delta(Some(DeltaClass::Geometry), &[], &[], &[ix(0), ix(1)]);
     pending.absorb(delta(Some(DeltaClass::Property), &[], &[], &[]));

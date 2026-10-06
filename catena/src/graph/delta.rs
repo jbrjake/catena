@@ -11,8 +11,8 @@ pub(crate) enum DeltaClass {
     /// Re-render only; positions are untouched. Label text that lays out as before, a sort
     /// key, a node or edge weight, an edge class.
     Property,
-    /// A local re-snap of the reshaped nodes. Label text that lays out differently, a shape,
-    /// a pin.
+    /// A local re-snap of the reshaped and repinned nodes. Label text that lays out
+    /// differently, a shape, a pin.
     Geometry,
     /// An incremental relayout. A node or edge added or removed, an edge's direction or
     /// layout participation flipped.
@@ -31,6 +31,9 @@ pub(crate) struct Delta {
     pub(crate) removed: BTreeSet<NodeIx>,
     /// Surviving nodes whose box may have changed, to re-snap. Never an added slot.
     pub(crate) reshaped: BTreeSet<NodeIx>,
+    /// Surviving nodes whose pin was set, moved or cleared, to re-snap at the pin even when
+    /// their box is as it was. Never an added slot.
+    pub(crate) repinned: BTreeSet<NodeIx>,
 }
 
 impl Delta {
@@ -40,13 +43,14 @@ impl Delta {
         for ix in later.removed {
             self.added.remove(&ix);
             self.reshaped.remove(&ix);
+            self.repinned.remove(&ix);
             self.removed.insert(ix);
         }
         self.added.extend(later.added);
-        for ix in later.reshaped {
-            if !self.added.contains(&ix) {
-                self.reshaped.insert(ix);
-            }
-        }
+        let added = &self.added;
+        self.reshaped
+            .extend(later.reshaped.into_iter().filter(|ix| !added.contains(ix)));
+        self.repinned
+            .extend(later.repinned.into_iter().filter(|ix| !added.contains(ix)));
     }
 }

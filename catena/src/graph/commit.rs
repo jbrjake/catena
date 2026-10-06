@@ -14,6 +14,7 @@ impl<K: Key> GraphStore<K> {
         let mut delta = Delta {
             class: Some(class),
             reshaped: changes.reshaped,
+            repinned: changes.repinned,
             ..Delta::default()
         };
 

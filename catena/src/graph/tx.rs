@@ -47,8 +47,10 @@ pub(super) struct Changes<K> {
     pub(super) fresh_edges: u32,
     pub(super) next_edge_id: u64,
     pub(super) class: Option<DeltaClass>,
-    /// Committed nodes whose layout may have changed.
+    /// Committed nodes whose box may have changed.
     pub(super) reshaped: BTreeSet<NodeIx>,
+    /// Committed nodes whose pin changed.
+    pub(super) repinned: BTreeSet<NodeIx>,
     /// Committed nodes whose sort key changed.
     pub(super) resorted: BTreeSet<NodeIx>,
 }
@@ -88,6 +90,7 @@ impl<'s, K: Key> Tx<'s, K> {
                 next_edge_id: store.next_edge_id,
                 class: None,
                 reshaped: BTreeSet::new(),
+                repinned: BTreeSet::new(),
                 resorted: BTreeSet::new(),
             },
         }
@@ -151,6 +154,7 @@ impl<'s, K: Key> Tx<'s, K> {
             }
         }
         self.changes.reshaped.remove(&ix);
+        self.changes.repinned.remove(&ix);
         self.changes.resorted.remove(&ix);
         self.keys.insert(key.clone(), None);
         self.mark(DeltaClass::Topology);
@@ -252,13 +256,18 @@ impl<'s, K: Key> Tx<'s, K> {
         let Some(class) = node_change(current, &next) else {
             return Ok(());
         };
+        let reshaped = box_may_change(current, &next);
+        let repinned = current.pinned != next.pinned;
         let resorted = current.order_key() != next.order_key();
         if let Some(NodeEdit::Added(Some((_, spec)))) = self.changes.nodes.get_mut(&ix) {
             *spec = next;
         } else {
             self.changes.nodes.insert(ix, NodeEdit::Changed(next));
-            if class == DeltaClass::Geometry {
+            if reshaped {
                 self.changes.reshaped.insert(ix);
+            }
+            if repinned {
+                self.changes.repinned.insert(ix);
             }
             if resorted {
                 self.changes.resorted.insert(ix);
@@ -360,16 +369,25 @@ fn next_slot(
     (slot < limit).then_some((slot, vacant_from, fresh + 1))
 }
 
-/// How a node edit changes the graph: geometry when its box may change, property when only
-/// what is drawn in it or how it sorts does, nothing when the spec is unchanged.
+/// How a node edit changes the graph: geometry when its box may change or its pin moves,
+/// property when only what is drawn in it or how it sorts does, nothing when the spec is
+/// unchanged.
 fn node_change(old: &NodeSpec, new: &NodeSpec) -> Option<DeltaClass> {
-    if old.shape != new.shape || old.pinned != new.pinned || !same_layout(&old.label, &new.label) {
+    if box_may_change(old, new) || old.pinned != new.pinned {
         Some(DeltaClass::Geometry)
     } else if old != new {
         Some(DeltaClass::Property)
     } else {
         None
     }
+}
+
+/// Whether a node's measured box may differ between two specs: its shape, the layout of its
+/// label, or whether it carries the in-box pin marker (plan §5) changed.
+fn box_may_change(old: &NodeSpec, new: &NodeSpec) -> bool {
+    old.shape != new.shape
+        || old.pinned.is_some() != new.pinned.is_some()
+        || !same_layout(&old.label, &new.label)
 }
 
 impl<K: Key> GraphStore<K> {

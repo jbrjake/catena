@@ -52,7 +52,10 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
   transaction's operations, so adding and removing one node is `Topology`; an edit that leaves a
   spec equal is no change, and a transaction of only such edits is no delta. An edge's
   `directed` flip is `Topology` (it changes a DAG's ranks); a pin set, moved or cleared is
-  `Geometry` (a local re-snap moves only that node); a sort key is `Property`. A label edit is
+  `Geometry` (a local re-snap moves only that node); a sort key is `Property`. The delta lists a
+  node as `reshaped` when its box may change (shape, label layout, or a pin set or cleared,
+  since the in-box marker comes and goes) and as `repinned` on any pin edit, so a moved pin
+  still re-snaps once step 2's measured boxes drop the reshapes that changed no box. A label edit is
   `Property` exactly when both labels have the same whitespace characters in the same places and
   characters of the same width everywhere else, width-0 ones included (`same_layout`): then
   every measure built from widths and breaks, word wrap included, gives the same box. Counting
