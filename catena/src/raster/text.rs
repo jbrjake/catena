@@ -103,8 +103,10 @@ impl<'a> Iterator for TextCells<'a> {
 ///   adds nothing) starts a new output line; an empty or all-blank input line yields one empty
 ///   output line.
 /// - Words break on whitespace. A word wider than `width` is split at the width, by columns.
-/// - A character wider than `width` cannot be placed and is dropped; that happens only at
-///   width 1, for a double-width character.
+/// - A word of no width (only width-0 characters) draws nothing and is dropped, so it never
+///   takes a line of its own.
+/// - A character wider than `width` cannot be placed and is dropped, with the width-0
+///   characters riding on it; that happens only at width 1, for a double-width character.
 /// - Empty input, or a width of zero, yields an empty `Vec`.
 ///
 /// Every output line measures at most `width` columns.
@@ -131,6 +133,9 @@ fn wrap_paragraph(paragraph: &str, width: usize, lines: &mut Vec<String>) {
     for word in paragraph.split_whitespace() {
         let word_width = display_width(word);
 
+        if word_width == 0 {
+            continue;
+        }
         if word_width > width {
             // Flush current line if non-empty.
             if !current_line.is_empty() {
@@ -167,13 +172,18 @@ fn wrap_paragraph(paragraph: &str, width: usize, lines: &mut Vec<String>) {
     }
 }
 
-/// Splits a word wider than `width` into chunks of at most `width` columns.
+/// Splits a word wider than `width` into chunks of at most `width` columns. A character too
+/// wide for any chunk is dropped with the width-0 characters after it.
 fn split_long_word(word: &str, width: usize, lines: &mut Vec<String>) {
     let mut chunk = String::new();
     let mut chunk_width = 0;
+    let mut dropping = false;
     for c in word.chars() {
         let w = char_width(c);
-        if w > width {
+        if w > 0 {
+            dropping = w > width;
+        }
+        if dropping {
             continue;
         }
         if chunk_width + w > width {
@@ -183,7 +193,8 @@ fn split_long_word(word: &str, width: usize, lines: &mut Vec<String>) {
         chunk.push(c);
         chunk_width += w;
     }
-    if !chunk.is_empty() {
+    // Only the first chunk can be all width-0, and only when every wider character was dropped.
+    if chunk_width > 0 {
         lines.push(chunk);
     }
 }

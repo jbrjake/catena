@@ -475,12 +475,13 @@ Each `verify:` lists the named tests first, because a test filter that matches n
   verify: `cargo test -p catena raster::blit::tests::a_canvas_request_past_the_cell_ceiling_is_bounded`
   (bounded to `MAX_CELLS`: 65 535 columns get 64 rows)
 
-- [ ] **Give invisible text no line in `word_wrap` (M2 step 2)** — a word made only of width-0
+- [x] **Give invisible text no line in `word_wrap` (M2 step 2)** — a word made only of width-0
   characters (`"a \u{301}"` at width 1) and the marks of a wide character dropped at width 1
   (`"日\u{301}"`) each come out as a line that draws nothing, so a `Box` label would grow
   phantom rows. Found by the `same_layout` property in M2 step 1, which now counts width-0
-  characters and so stays sound either way. Lands with the bordered node box, `word_wrap`'s
-  first caller. verify: `cargo test -p catena -- --list | grep -c
+  characters and so stays sound either way. Fixed ahead of the bordered node box, `word_wrap`'s
+  first caller: a word left with no width is dropped, and the wrap property now also asserts
+  that no line but a blank paragraph's measures zero. verify: `cargo test -p catena -- --list | grep -c
   'an_invisible_word_takes_no_line\|a_dropped_wide_characters_marks_go_with_it' | grep -qx 2 &&
   cargo test -p catena -- raster::text`
 - [ ] **Make the tree passes total on any input (M4)** — `compute_subtree_width` and

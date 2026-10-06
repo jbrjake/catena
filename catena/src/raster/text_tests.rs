@@ -93,6 +93,36 @@ fn a_character_wider_than_the_width_is_dropped() {
 }
 
 #[test]
+fn an_invisible_word_takes_no_line() {
+    // A word of width-0 characters draws nothing, so a line of its own would be a phantom row
+    // in a bordered node box.
+    assert_eq!(word_wrap("a \u{301}", 1), ["a"]);
+    assert_eq!(word_wrap("a \u{301}\u{200d} b", 3), ["a b"]);
+    assert_eq!(
+        word_wrap("x\u{0}", 4),
+        ["x\u{0}"],
+        "a visible word keeps its controls"
+    );
+    assert_eq!(
+        word_wrap("\u{301}", 4),
+        [""],
+        "a paragraph of invisible words is blank, so it keeps its one empty line"
+    );
+}
+
+#[test]
+fn a_dropped_wide_characters_marks_go_with_it() {
+    assert_eq!(word_wrap("日\u{301}", 1), [""]);
+    assert_eq!(word_wrap("a日\u{301}\u{302}b", 1), ["a", "b"]);
+    assert_eq!(word_wrap("ab 日\u{301}", 1), ["a", "b"]);
+    assert_eq!(
+        word_wrap("ab \u{301}日", 1),
+        ["a", "b"],
+        "a mark before it is left with no width, so it goes too"
+    );
+}
+
+#[test]
 fn newlines_start_new_lines() {
     assert_eq!(word_wrap("one two\nthree", 20), ["one two", "three"]);
     assert_eq!(word_wrap("a\n\nb", 20), ["a", "", "b"]);
@@ -216,11 +246,27 @@ fn cells_by_rule(text: &str) -> Vec<(String, u16)> {
     cells
 }
 
-/// The text's characters other than whitespace, minus any too wide for `width`.
+/// The characters word wrap keeps at `width`, word by word: every character but one too wide
+/// for `width` and the width-0 ones riding on it, and none of a word left with no width.
 fn kept_chars(text: &str, width: usize) -> String {
-    text.chars()
-        .filter(|c| !c.is_whitespace() && char_width(*c) <= width)
-        .collect()
+    let mut kept = String::new();
+    for word in text.split_whitespace() {
+        let mut dropping = false;
+        let survivors: String = word
+            .chars()
+            .filter(|&c| {
+                let w = char_width(c);
+                if w > 0 {
+                    dropping = w > width;
+                }
+                !dropping
+            })
+            .collect();
+        if display_width(&survivors) > 0 {
+            kept.push_str(&survivors);
+        }
+    }
+    kept
 }
 
 proptest! {
@@ -245,6 +291,10 @@ proptest! {
         } else {
             for line in &lines {
                 prop_assert!(display_width(line) <= width, "{:?} wider than {}", line, width);
+                prop_assert!(
+                    line.is_empty() || display_width(line) > 0,
+                    "{:?} is a line that draws nothing", line
+                );
             }
             let rejoined: String = lines.concat();
             prop_assert_eq!(kept_chars(&rejoined, width), kept_chars(&text, width));
