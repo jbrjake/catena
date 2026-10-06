@@ -1,6 +1,7 @@
 //! Rasterization: sub-cell canvases, blitters and drawing primitives (plan §7.2, §7.3).
 
 mod braille;
+mod polyline;
 #[cfg_attr(
     not(test),
     expect(
@@ -11,3 +12,4 @@ mod braille;
 mod text;
 
 pub use braille::BrailleCanvas;
+pub use polyline::polyline_pixels;

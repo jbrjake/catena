@@ -5,12 +5,12 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**Absorb the owner's course correction** (`docs/design/owner-rulings.md`, A1–A4 below). A1 and
-A2 change code that has landed, so each is a follow-up commit now: A1 first (the tessellator and
-polyline primitives in `catena/src/geometry/curve.rs` and `catena/src/raster/polyline.rs`, with
-the braille canvas's curve and dash primitives rebuilt on them), then A2 in its own commit (G1
-chord cubics, which draw through A1's tessellator). A3 and A4 land with the code they shape (M1
-scene, M3 controller, the radial view). Also confirm CI green on rustc 1.99 for `f61941b`.
+**A2: G1 chord cubics, in its own commit** (`docs/design/owner-rulings.md`; A1 is done). In
+`generate_bundled_edges` (`catena/src/layout/radial/chord.rs`), an inter-group edge becomes two
+`geometry::curve::Bezier::Cubic`s meeting at `J = b_root` with matched tangents; the waist arm
+goes next to `default_beta()` with a tuned default; `segments_chain_continuously` is replaced by
+a tangent test. A3 and A4 land with the code they shape (M1 scene, M3 controller, the radial
+view).
 
 Then M0's last harvest: `git mv seed/tests/visual/svg_renderer.rs
 catena-testkit/src/svg.seed.rs` and `seed/tests/visual/snapshots.rs
@@ -41,10 +41,47 @@ run the M0 gate's `verify:` and close M0.
   the oracle is independent of the code under test.
 - **The M0 braille port keeps `BrailleCanvas`; the `SubCellCanvas` generalization is M1.** Plan
   §19 lists the generalization under M1. M0 applies the other §18 changes: `get_cell` clips
-  (with a `try_get_cell` returning `Option`), the four Bézier loops become one sampler. It also
-  folds the three Bresenham loops into one walker, because fixing their `i32` overflows (found in
-  the port: endpoint sums, centre-plus-radius, distance squares, dash periods) rewrote every line
-  of them; a 33-raster characterization test pins the output to the seed's, dot for dot.
+  (with a `try_get_cell` returning `Option`), the four Bézier loops become one sampler (since
+  A1, the tessellator). It also folds the three Bresenham loops into one walker, because fixing
+  their `i32` overflows (found in the port: endpoint sums, centre-plus-radius, distance squares,
+  dash periods) rewrote every line of them; a 33-raster characterization test pins the output to
+  the seed's (since A1, where A1 leaves it; see the A1 decisions).
+- **A1: curves live in `geometry::curve`, polylines are drawn by `raster`.** `Bezier` (quadratic
+  or cubic, `f64` sub-pixels) and `tessellate(chain, &mut out)` are public in `geometry::curve`,
+  since a curve is geometry the layouts emit (A2's chord cubics) and the raster only sees
+  polylines. `raster::polyline_pixels` (the walk, public so the integration tests can check it)
+  and the canvas's `draw_polyline`, `draw_dashed_polyline`, `draw_polyline_with_hops`,
+  `draw_curve` and `draw_dashed_curve` sit beside the seed's integer primitives, which now
+  delegate to them. The canvas keeps scratch vectors for tessellation and arc lengths, so
+  drawing allocates only on first use.
+- **A1: arc length is Euclidean along the `f64` polyline**, not a count of pixel steps, so a dash
+  looks the same length at any angle. A pixel sits at the arc length of its centre's nearest
+  point on the polyline (searched over the segments around the walk, never stepping backwards).
+- **A1: each dash and gap rounds to its own length, not to absolute multiples of the period.** A
+  run spans from the midpoint before its first pixel to the midpoint after its last, and ends at
+  the boundary closest to its pattern length, so every run is within half a pixel step (≤ √2/2)
+  of it. Boundaries locked to `k·period` would each be up to √2/2 off, so a run up to √2 off on a
+  diagonal, past the ruled ±1; the cost is a phase that drifts along long curves, which nothing
+  shows. On horizontal and vertical lines a run of n pixels spans exactly n, so those dashes
+  match the seed's dot for dot; on other slopes they differ from the seed's step counts by design.
+- **A1: the walk skips a pixel equal to either of the two last emitted.** That drops each joint's
+  repeat and the one-pixel back-step rounding makes at a curve's extremum, so a polyline that does
+  not cross itself emits each pixel once. Vertices round, then clamp to the `i32` range, so a
+  polyline costs no more than the widest integer line. Hop gaps never suppress the polyline's
+  first or last pixel; interior vertices get no protection, being tessellation artifacts.
+- **A1: "no duplicates" is checked on the emitted walk**, since `lit_pixels` decodes a set and
+  cannot show a repeat; the canvas test then checks it lights exactly the walk's pixels. The
+  generated curves (bowed quadratics, forward-armed cubics, two-cubic G1 chains, chords from 6 to
+  120 sub-pixels) all advance along their chord, so none crosses itself.
+- **A1: the dash oracle measures along the tessellated polyline in walk order,** projecting each
+  pixel onto its globally nearest point. Sorting pixels by arc position instead is ambiguous
+  where several pixels outside a bend project onto the same vertex. Both A1 properties were seen
+  failing against the seed's sampler (sample-only curves, sample-index dashes) and the dash one
+  also against step-count dashing, before the walk made them pass.
+- **A1: the seed characterization keeps what A1 leaves.** 16 of the 33 rasters stay dot for dot
+  (lines, hop lines, circles, axis-aligned dashes); the 7 solid curves keep every dot the seed
+  plotted, now joined into a connected line; the 10 dashed rasters on curves and slopes are
+  measured by the arc-length properties instead and must lie on their solid twin.
 - **`word_wrap` leaves by copy, not `git mv`.** The rest of `seed/ui/box_layout.rs` and its tests
   stay as the box-drawing reference for M1 (plan §18 "reference for box drawing only"), and
   §19's M0 `verify:` does not list them. The copy is staged as `text.seed.rs` and ported in the
@@ -136,7 +173,7 @@ run the M0 gate's `verify:` and close M0.
 Quoted in full in `docs/design/owner-rulings.md`, with a table of the plan text each overrides.
 Each `verify:` lists the named tests first, because a test filter that matches nothing exits 0.
 
-- [ ] **A1 — the sampler is a tessellator** — one `tessellate` turns a quadratic, a cubic or a
+- [x] **A1 — the sampler is a tessellator** — one `tessellate` turns a quadratic, a cubic or a
   chain of either into a polyline at the seed's density, `steps = (chord/2).clamp(10, 200)`;
   solid, dashed and hop-gapped primitives work on polylines; dashes by arc length along the
   polyline; the seed's dash-phase note is not carried. Tests: invariant E on tessellated
@@ -177,9 +214,11 @@ Each `verify:` lists the named tests first, because a test filter that matches n
 ## Found while porting
 
 - [ ] **Bound the work of a huge segment** — since the M0 port, a line spanning the whole `i32`
-  range no longer overflows, but `walk_line` then steps all ~4·10⁹ pixels. Clipping segments to
-  the canvas before rasterizing (plan §6, ledger row 14) fixes it in M1. verify: a test drawing
-  `(i32::MIN, 0)` to `(i32::MAX, 3)` on an 8×2 canvas finishes under `cargo test` in < 1 s
+  range no longer overflows, but the walk then steps all ~4·10⁹ pixels; since A1 the same holds
+  for a curve, which used to cost at most 201 samples. Clipping segments to the canvas before
+  rasterizing (plan §6, ledger row 14) fixes both in M1. verify: a test drawing `(i32::MIN, 0)`
+  to `(i32::MAX, 3)` as a line and as a bowed curve on an 8×2 canvas finishes under `cargo test`
+  in < 1 s
 - [ ] **Bound canvas allocation** — `BrailleCanvas::new` takes `usize` dimensions and allocates
   their product unchecked. M1's `SubCellCanvas` should take terminal-sized `u16` dimensions.
   verify: `cargo test -p catena raster::` with a test that a `u16::MAX`-square canvas request is

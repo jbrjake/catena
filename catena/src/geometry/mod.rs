@@ -1,4 +1,6 @@
-//! Geometry: node measurement, grid snapping and the viewport (plan §5, §6).
+//! Geometry: curves, node measurement, grid snapping and the viewport (plan §5, §6).
+
+pub mod curve;
 
 #[cfg_attr(
     not(test),

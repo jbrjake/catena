@@ -4,9 +4,17 @@
 //! giving 8 individually addressable dots per cell -- 2x horizontal and 4x vertical
 //! resolution compared to regular character rendering.
 //!
-//! Every primitive takes signed `i32` sub-pixel coordinates so callers can pass off-screen
-//! endpoints; arithmetic runs in `i64` so no input overflows, and pixels outside the canvas are
-//! silently clipped. M1 generalizes this canvas to `SubCellCanvas` (plan §7.2).
+//! Lines and curves are drawn as polylines (owner ruling A1): a line is two vertices, a curve is
+//! its tessellation, and solid, dashed and hop-gapped drawing all walk the polyline's pixels.
+//! Coordinates are signed sub-pixels so callers can pass off-screen endpoints; arithmetic runs in
+//! `i64` so no input overflows, and pixels outside the canvas are silently clipped. M1
+//! generalizes this canvas to `SubCellCanvas` (plan §7.2).
+
+use super::polyline::{Walk, dash, snap};
+use crate::geometry::curve::{Bezier, tessellate};
+
+#[cfg(doc)]
+use super::polyline::polyline_pixels;
 
 /// Bit positions for Braille dots within a cell.
 /// Layout:  (col=0, col=1)
@@ -33,6 +41,10 @@ pub struct BrailleCanvas {
     cell_height: usize,
     /// Flat bitmask buffer indexed by `cell_y * cell_width + cell_x`.
     buffer: Vec<u8>,
+    /// Reused by every curve for its tessellated polyline.
+    points: Vec<(f64, f64)>,
+    /// Reused by every dashed primitive for its vertices' cumulative arc lengths.
+    arc: Vec<f64>,
 }
 
 impl BrailleCanvas {
@@ -44,6 +56,8 @@ impl BrailleCanvas {
             cell_width,
             cell_height,
             buffer: vec![0u8; cell_width * cell_height],
+            points: Vec::new(),
+            arc: Vec::new(),
         }
     }
 
@@ -90,11 +104,64 @@ impl BrailleCanvas {
         }
     }
 
+    /// Draw the polyline through `points` (sub-pixel coordinates; see [`polyline_pixels`]).
+    /// Pixels outside the canvas are silently clipped.
+    pub fn draw_polyline(&mut self, points: &[(f64, f64)]) {
+        for pixel in Walk::new(points) {
+            self.plot(pixel.x, pixel.y);
+        }
+    }
+
+    /// Draw a dashed polyline: `dash_on` sub-pixels of arc length drawn, then `dash_off`
+    /// skipped, repeating from a dash at the first vertex. Each dash and gap holds at least one
+    /// pixel and spans within half a pixel step of its length; `dash_on = 0` draws nothing and
+    /// `dash_off = 0` draws solid.
+    pub fn draw_dashed_polyline(&mut self, points: &[(f64, f64)], dash_on: u32, dash_off: u32) {
+        let mut walk = Walk::measured(points, std::mem::take(&mut self.arc));
+        dash(
+            &mut walk,
+            f64::from(dash_on),
+            f64::from(dash_off),
+            |x, y| self.plot(x, y),
+        );
+        self.arc = walk.into_buffer();
+    }
+
+    /// Draw a polyline with hop gaps at crossing points. Each hop is `(center_x, center_y,
+    /// radius)`: pixels within the disc are skipped, leaving a visible gap where another line
+    /// crosses over this one. The polyline's first and last pixels are always drawn.
+    pub fn draw_polyline_with_hops(&mut self, points: &[(f64, f64)], hops: &[(i32, i32, i32)]) {
+        let ends = [points.first(), points.last()].map(|p| p.map(|&p| snap(p)));
+        for pixel in Walk::new(points) {
+            let (x, y) = (pixel.x, pixel.y);
+            let is_endpoint = ends.contains(&Some((x, y)));
+            if is_endpoint || !hops.iter().any(|&hop| in_disc(x, y, hop)) {
+                self.plot(x, y);
+            }
+        }
+    }
+
+    /// Draw a curve: a Bézier piece or a chain of them, tessellated into a polyline.
+    pub fn draw_curve(&mut self, chain: &[Bezier]) {
+        let mut points = std::mem::take(&mut self.points);
+        tessellate(chain, &mut points);
+        self.draw_polyline(&points);
+        self.points = points;
+    }
+
+    /// Draw a dashed curve: [`BrailleCanvas::draw_dashed_polyline`] over its tessellation.
+    pub fn draw_dashed_curve(&mut self, chain: &[Bezier], dash_on: u32, dash_off: u32) {
+        let mut points = std::mem::take(&mut self.points);
+        tessellate(chain, &mut points);
+        self.draw_dashed_polyline(&points, dash_on, dash_off);
+        self.points = points;
+    }
+
     /// Draw a line between two pixel coordinates using Bresenham's algorithm.
     /// Accepts `i32` so callers can pass off-screen (negative) endpoints;
     /// pixels outside the canvas are silently clipped.
     pub fn draw_line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32) {
-        walk_line(x0, y0, x1, y1, |x, y, _| self.plot(x, y));
+        self.draw_polyline(&[pt(x0, y0), pt(x1, y1)]);
     }
 
     /// Draw a line with hop gaps at crossing points.
@@ -108,20 +175,12 @@ impl BrailleCanvas {
         y1: i32,
         hops: &[(i32, i32, i32)],
     ) {
-        let start = (i64::from(x0), i64::from(y0));
-        let end = (i64::from(x1), i64::from(y1));
-        walk_line(x0, y0, x1, y1, |x, y, _| {
-            // Always draw endpoints; hops only suppress interior crossing pixels.
-            let is_endpoint = (x, y) == start || (x, y) == end;
-            let in_hop = !is_endpoint && hops.iter().any(|&hop| in_disc(x, y, hop));
-            if !in_hop {
-                self.plot(x, y);
-            }
-        });
+        self.draw_polyline_with_hops(&[pt(x0, y0), pt(x1, y1)], hops);
     }
 
-    /// Draw a dashed line between two pixel coordinates.
-    /// `dash_on` pixels are drawn, then `dash_off` pixels are skipped, repeating.
+    /// Draw a dashed line between two pixel coordinates: `dash_on` sub-pixels of arc length
+    /// drawn, then `dash_off` skipped, repeating (see
+    /// [`BrailleCanvas::draw_dashed_polyline`]).
     pub fn draw_dashed_line(
         &mut self,
         x0: i32,
@@ -131,25 +190,12 @@ impl BrailleCanvas {
         dash_on: u32,
         dash_off: u32,
     ) {
-        let Some(period) = dash_period(dash_on, dash_off) else {
-            // Nothing to draw with a zero-length dash period.
-            return;
-        };
-        walk_line(x0, y0, x1, y1, |x, y, step| {
-            if step % period < u64::from(dash_on) {
-                self.plot(x, y);
-            }
-        });
+        self.draw_dashed_polyline(&[pt(x0, y0), pt(x1, y1)], dash_on, dash_off);
     }
 
-    /// Draw a dashed Bézier curve between two pixel coordinates.
-    /// `dash_on` pixels are drawn, then `dash_off` pixels are skipped, repeating.
-    ///
-    /// Low-severity note: dash phase is counted by sample index, not arc-length.
-    /// For very short curves (len < 20 px) the clamp to 10 steps means multiple
-    /// samples land on the same pixel, so the visible dash pattern may appear
-    /// coarser or fully solid regardless of period.  Acceptable for the current
-    /// use-case (self-loop / near-coincident node edges).
+    /// Draw a dashed Bézier curve between two pixel coordinates, bowed like
+    /// [`BrailleCanvas::draw_bezier`]: `dash_on` sub-pixels of arc length drawn, then
+    /// `dash_off` skipped, repeating.
     pub fn draw_dashed_bezier(
         &mut self,
         x0: i32,
@@ -159,15 +205,12 @@ impl BrailleCanvas {
         dash_on: u32,
         dash_off: u32,
     ) {
-        let Some(period) = dash_period(dash_on, dash_off) else {
-            return;
-        };
         let ctrl = bow_control(x0, y0, x1, y1);
-        sample_quadratic((x0, y0), ctrl, (x1, y1), |x, y, i| {
-            if i % period < u64::from(dash_on) {
-                self.plot(x, y);
-            }
-        });
+        self.draw_dashed_curve(
+            &[quadratic(pt(x0, y0), ctrl, pt(x1, y1))],
+            dash_on,
+            dash_off,
+        );
     }
 
     /// Draw a quadratic Bezier curve between two pixel coordinates.
@@ -175,7 +218,7 @@ impl BrailleCanvas {
     /// creating a gentle arc that visually distinguishes overlay edges.
     pub fn draw_bezier(&mut self, x0: i32, y0: i32, x1: i32, y1: i32) {
         let ctrl = bow_control(x0, y0, x1, y1);
-        sample_quadratic((x0, y0), ctrl, (x1, y1), |x, y, _| self.plot(x, y));
+        self.draw_curve(&[quadratic(pt(x0, y0), ctrl, pt(x1, y1))]);
     }
 
     /// Draw a quadratic Bezier curve with an explicit control point.
@@ -191,13 +234,12 @@ impl BrailleCanvas {
         ctrl_x: i32,
         ctrl_y: i32,
     ) {
-        let ctrl = (f64::from(ctrl_x), f64::from(ctrl_y));
-        sample_quadratic((x0, y0), ctrl, (x1, y1), |x, y, _| self.plot(x, y));
+        self.draw_curve(&[quadratic(pt(x0, y0), pt(ctrl_x, ctrl_y), pt(x1, y1))]);
     }
 
     /// Draw a dashed quadratic Bézier curve with an explicit control point.
     /// Combines the explicit control point of `draw_bezier_ctrl` with a dash
-    /// pattern: `dash_on` pixels are drawn, then `dash_off` pixels are skipped.
+    /// pattern: `dash_on` sub-pixels of arc length drawn, then `dash_off` skipped.
     #[expect(
         clippy::too_many_arguments,
         reason = "the seed's signature; M1's SubCellCanvas takes points and a dash pattern"
@@ -213,15 +255,8 @@ impl BrailleCanvas {
         dash_on: u32,
         dash_off: u32,
     ) {
-        let Some(period) = dash_period(dash_on, dash_off) else {
-            return;
-        };
-        let ctrl = (f64::from(ctrl_x), f64::from(ctrl_y));
-        sample_quadratic((x0, y0), ctrl, (x1, y1), |x, y, i| {
-            if i % period < u64::from(dash_on) {
-                self.plot(x, y);
-            }
-        });
+        let curve = quadratic(pt(x0, y0), pt(ctrl_x, ctrl_y), pt(x1, y1));
+        self.draw_dashed_curve(&[curve], dash_on, dash_off);
     }
 
     /// Draw a circle outline using the Midpoint Circle algorithm.
@@ -320,11 +355,13 @@ impl BrailleCanvas {
     }
 }
 
-/// `dash_on + dash_off`, or `None` for a zero period (nothing to draw). A sum past `u32::MAX`
-/// cannot overflow: the period is `u64`.
-fn dash_period(dash_on: u32, dash_off: u32) -> Option<u64> {
-    let period = u64::from(dash_on) + u64::from(dash_off);
-    (period > 0).then_some(period)
+/// An integer pixel coordinate as a polyline vertex.
+fn pt(x: i32, y: i32) -> (f64, f64) {
+    (f64::from(x), f64::from(y))
+}
+
+fn quadratic(from: (f64, f64), ctrl: (f64, f64), to: (f64, f64)) -> Bezier {
+    Bezier::Quadratic { from, ctrl, to }
 }
 
 /// Whether `(x, y)` lies in the closed disc `(center_x, center_y, radius)`.
@@ -335,36 +372,6 @@ fn in_disc(x: i64, y: i64, (hx, hy, r): (i32, i32, i32)) -> bool {
     // |dx| and |dy| can approach 2^32, so their squares can pass i64::MAX; a saturated sum is
     // still larger than any r² <= 2^62, so the comparison stays exact.
     dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy)) <= r * r
-}
-
-/// Walks the Bresenham line from `(x0, y0)` to `(x1, y1)` inclusive, calling `visit` with each
-/// pixel and its 0-based step index. Runs in `i64`, so no `i32` endpoints overflow.
-fn walk_line(x0: i32, y0: i32, x1: i32, y1: i32, mut visit: impl FnMut(i64, i64, u64)) {
-    let (mut x, mut y) = (i64::from(x0), i64::from(y0));
-    let (x1, y1) = (i64::from(x1), i64::from(y1));
-    let dx = (x1 - x).abs();
-    let dy = -(y1 - y).abs();
-    let sx = if x < x1 { 1 } else { -1 };
-    let sy = if y < y1 { 1 } else { -1 };
-    let mut err = dx + dy;
-    let mut step = 0u64;
-
-    loop {
-        visit(x, y, step);
-        if x == x1 && y == y1 {
-            break;
-        }
-        let e2 = 2 * err;
-        if e2 >= dy {
-            err += dy;
-            x += sx;
-        }
-        if e2 <= dx {
-            err += dx;
-            y += sy;
-        }
-        step += 1;
-    }
 }
 
 /// The control point of the gentle arc `draw_bezier` draws: offset from the chord's midpoint,
@@ -388,52 +395,6 @@ fn bow_control(x0: i32, y0: i32, x1: i32, y1: i32) -> (f64, f64) {
         (0.0, 0.0)
     };
     (mx + nx * offset, my + ny * offset)
-}
-
-/// Samples the quadratic Bézier `B(t) = (1-t)^2 P0 + 2(1-t)t C + t^2 P1` and calls `plot` with
-/// each sample rounded to the nearest pixel, plus the sample's index (the dash phase). The one
-/// sampler behind every curve primitive.
-///
-/// Sampling density: one sample per 2 sub-pixels of chord length, clamped to 10..=200 samples
-/// (plus the closing one).
-fn sample_quadratic(
-    (x0, y0): (i32, i32),
-    (ctrl_x, ctrl_y): (f64, f64),
-    (x1, y1): (i32, i32),
-    mut plot: impl FnMut(i64, i64, u64),
-) {
-    let (x0, y0, x1, y1) = (f64::from(x0), f64::from(y0), f64::from(x1), f64::from(y1));
-    let dx = x1 - x0;
-    let dy = y1 - y0;
-    let steps = sample_count((dx * dx + dy * dy).sqrt());
-    for i in 0..=steps {
-        let t = f64::from(i) / f64::from(steps);
-        let one_minus_t = 1.0 - t;
-        let px = one_minus_t * one_minus_t * x0 + 2.0 * one_minus_t * t * ctrl_x + t * t * x1;
-        let py = one_minus_t * one_minus_t * y0 + 2.0 * one_minus_t * t * ctrl_y + t * t * y1;
-        plot(round_px(px), round_px(py), u64::from(i));
-    }
-}
-
-/// `(len / 2).clamp(10, 200)` for a chord of `len` sub-pixels, truncating like the seed did.
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "len is a finite, non-negative chord length, and the float-to-int cast saturates"
-)]
-fn sample_count(len: f64) -> u32 {
-    let half = (len as u64) / 2;
-    u32::try_from(half.clamp(10, 200)).expect("clamped to at most 200")
-}
-
-/// Rounds a sample to the nearest pixel.
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "samples lie between i32 endpoints and control points, far inside i64; the cast \
-              saturates anyway"
-)]
-fn round_px(v: f64) -> i64 {
-    v.round() as i64
 }
 
 #[cfg(test)]
