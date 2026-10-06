@@ -342,3 +342,7 @@ impl Bounds {
 #[cfg(test)]
 #[path = "engine_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "stability_tests.rs"]
+mod stability_tests;

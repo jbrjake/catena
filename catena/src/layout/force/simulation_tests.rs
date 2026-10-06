@@ -252,6 +252,41 @@ fn a_new_body_in_a_warm_run_starts_beside_its_placed_neighbors_and_ramps_in() {
 }
 
 #[test]
+fn a_survivor_in_a_warm_run_anneals_from_converge_eps_while_a_newcomer_moves_freely() {
+    let mut a = body(4.0);
+    a.previous = Some((0.0, 0.0));
+    let mut b = body(4.0);
+    b.previous = Some((1.0, 0.0));
+    let bodies = [a, b, body(4.0)];
+    let params = ForceParams::default();
+    let springs = [spring(0, 2)];
+    let mut run = Run::new(&params, &bodies, &springs, 8.0, AREA);
+    let start = run.positions.clone();
+    run.step(0);
+    let first: Vec<f64> = start
+        .iter()
+        .zip(&run.positions)
+        .map(|(&s, &p)| distance(s, p))
+        .collect();
+    assert!(
+        (first[0] - params.converge_eps).abs() < 1e-9
+            && (first[1] - params.converge_eps).abs() < 1e-9,
+        "two survivors a unit apart push hard but step converge_eps: {first:?}"
+    );
+    assert!(
+        first[2] > 1.0,
+        "the newcomer takes the warm temperature: {first:?}"
+    );
+    let before = run.positions.clone();
+    run.step(1);
+    let second = distance(before[0], run.positions[0]);
+    assert!(
+        (second - params.converge_eps * params.cooling).abs() < 1e-9,
+        "and the survivors' cap cools with the run: {second}"
+    );
+}
+
+#[test]
 fn hostile_parameters_still_give_finite_positions() {
     let (bodies, springs) = sample();
     let params = ForceParams {

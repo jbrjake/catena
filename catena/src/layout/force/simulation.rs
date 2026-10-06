@@ -62,10 +62,14 @@ fn mean(values: &[f64]) -> f64 {
 /// Lays `bodies` out and returns each one's position: its center, in world units.
 ///
 /// The run is warm when any body has a previous position: then the temperature starts at
-/// `max(area) / 8` for `warm_iterations` steps, survivors start where they were, and a new
-/// body starts beside its placed neighbors and ramps its force in. Otherwise it is cold:
-/// `max(area) / 2` for `iterations` steps, from a circle of radius `√n` times the average
-/// width. Either way a step whose largest move is under `converge_eps` ends the run.
+/// `max(area) / 8` for `warm_iterations` steps, a new body starts beside its placed neighbors
+/// and ramps its force in, and a survivor starts where it was and anneals on the same schedule
+/// scaled so its first step is at most `converge_eps`, which bounds its whole drift by
+/// `converge_eps / (1 − cooling)`. The seed's schedule freezes a cold layout before it reaches
+/// equilibrium, so letting survivors take the full warm temperature relaxes the whole layout on
+/// every relayout, change or no change (invariant F). A cold run takes `max(area) / 2` for
+/// `iterations` steps from a circle of radius `√n` times the average width. Either way a step
+/// whose largest move is under `converge_eps` ends the run.
 pub(crate) fn simulate(
     params: &ForceParams,
     bodies: &[Body],
@@ -93,6 +97,11 @@ pub(super) struct Run<'a> {
     masses: Vec<f64>,
     /// Whether each body is new to a warm layout, and so ramps its force in.
     fresh: Vec<bool>,
+    /// Whether each body survives into a warm layout, and so moves at most `settle` times the
+    /// temperature.
+    settled: Vec<bool>,
+    /// A survivor's share of the temperature: what makes its first step `converge_eps`.
+    settle: f64,
     pub(super) positions: Vec<(f64, f64)>,
     displacements: Vec<(f64, f64)>,
     temperature: f64,
@@ -119,7 +128,14 @@ impl<'a> Run<'a> {
             .iter()
             .map(|b| warm && b.previous.is_none() && b.pin.is_none())
             .collect();
+        let settled = bodies.iter().map(|b| b.previous.is_some()).collect();
         let span = area.0.max(area.1);
+        let temperature = if warm { span / 8.0 } else { span / 2.0 };
+        let settle = if temperature > params.converge_eps {
+            params.converge_eps / temperature
+        } else {
+            1.0
+        };
         Run {
             params,
             bodies,
@@ -127,9 +143,11 @@ impl<'a> Run<'a> {
             k,
             masses,
             fresh,
+            settled,
+            settle,
             positions: start_positions(bodies, springs, k),
             displacements: vec![(0.0, 0.0); bodies.len()],
-            temperature: if warm { span / 8.0 } else { span / 2.0 },
+            temperature,
             steps: if warm {
                 params.warm_iterations
             } else {
@@ -149,7 +167,12 @@ impl<'a> Run<'a> {
             }
             let (dx, dy) = self.displacements[i];
             let magnitude = (dx * dx + dy * dy).sqrt().max(0.01);
-            let length = magnitude.min(self.temperature);
+            let cap = if self.settled[i] {
+                self.temperature * self.settle
+            } else {
+                self.temperature
+            };
+            let length = magnitude.min(cap);
             let (x, y) = self.positions[i];
             let moved = (x + dx / magnitude * length, y + dy / magnitude * length);
             if moved.0.is_finite() && moved.1.is_finite() {

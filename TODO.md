@@ -74,6 +74,22 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
   halved ring cut through the core (the ring tests fail with it). The ring is round in world
   space; the seed squashed its height by half in cells. `lay_out` takes the commit's `added`
   set, whose slots start fresh even where `positions` still holds a removed node's place.
+- **M2 step 3: in a warm run a survivor anneals from `converge_eps`, not the warm temperature.**
+  Plan §8.3 has survivors start "with the warm temperature"; measured over the generated
+  families (120 × 40 cells, `Fit::Contain` scale, 6 of 120 nodes added), that kept only 3% to
+  82% of survivors within two cells, against invariant F's 90%, and a warm rerun of an
+  unchanged graph moved up to 97% of nodes past two cells. The cause: the seed's cooling (span
+  / 2, × 0.95 a step) drops below `converge_eps` near step 94, so a cold run stops frozen, not at
+  equilibrium (500 or 2000 iterations change nothing; cooling at 0.99 over 1000 nearly fixes
+  it, at ten times the cost), and the warm restart at span / 8 relaxes everything. Now a
+  survivor's step cap is the temperature times `converge_eps / T₀`: it starts at
+  `converge_eps` and cools with the run, so its whole drift stays under `converge_eps / (1 −
+  cooling)`, 10 units; new nodes keep the full warm temperature. Every default is unchanged.
+  With it every seed keeps 100% within two cells (24 runs at 60 and 120 nodes, and 8
+  unchanged reruns). The cost: survivors barely move in any warm run, so islands that new
+  nodes join stay apart on long edges until a cold layout. Open for step 4: a semantic level
+  change or a resize widens boxes and changes `k`, and may want survivors free (a reflow
+  rather than a settle). Unratified: the owner may prefer slower cooling.
 - **M2 step 3: the generated families (plan §20) are `fixtures::generated(seed, n)`.** One
   `SplitMix64` stream (checked against Vigna's reference outputs) draws, in order: each node's
   group (one in twenty ungrouped, the rest in contiguous groups of about 12), label (one to
