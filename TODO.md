@@ -5,22 +5,22 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**M2 (graph model + force layout + viewport, plan §19) is under way: step 1, the graph store,
-is done (`## M2` below); step 2, `ResolvedMetrics`, is next.** M2 in this order, each step
-green on its own:
+**M2 (graph model + force layout + viewport, plan §19) is under way: steps 1 and 2, the graph
+store and `ResolvedMetrics`, are done (`## M2` below); step 3, the force layout, is next.** M2
+in this order, each step green on its own:
 
 1. ~~The graph store~~ (plan §4): landed.
-2. `ResolvedMetrics` (plan §5): one private measuring function over `text_cells`, the semantic
-   zoom table (`geometry::zoom`, live at last), decorations inside the box, `max_label_cols`
-   (the store already cuts labels to it); node boxes and the `Label` payload drawn from it
-   (`NodeShape::Box` takes its border from `seed/ui/box_layout.rs`'s `render_box`, which is
-   then deleted, and wraps with `word_wrap`, so the "invisible text" item below lands here).
-   The store classifies label edits conservatively (`graph::spec::same_layout`); the measured
-   boxes decide which `Geometry` deltas actually move a node. The store's `Delta` (added,
-   removed, reshaped) collects in `GraphView::pending` for steps 3 and 4 to consume.
+2. ~~`ResolvedMetrics`~~ (plan §5): landed. `GraphView::pending` now holds every commit's
+   `Delta` with `reshaped` cut to the nodes whose measured box changed; `repinned` lists pin
+   edits, which re-snap with an unchanged box. Steps 3 and 4 consume it; nothing clears it yet.
+   No `Payload::Label`: a node's text is part of its `NodeBox` form (see the decision), so
+   §7.4's `Label{..}` waits for free-standing text, if any.
 3. Harvest `seed/graph/layout_fr.rs` and its tests by the §18 two-commit procedure into
    `layout/force/` (`ForceLayout`, both repulsion modes, honored `iterations`, no placement-time
-   aspect squash, `fmath` throughout), with invariants F and M.
+   aspect squash, `fmath` throughout), with invariants F and M. Its collision terms read box
+   sizes from `ResolvedMetrics::form` (width in columns, height in rows, which the isotropic
+   world of plan §6 scales by `1 / cell_aspect`); `nodes_in_order` and `edges_in_order` are its
+   iteration order.
 4. `GridSnapper` and the viewport (plan §6): isotropic `Fit::Contain`, `cell_aspect` once, the
    50-ring spiral, the enforced 2-row gap, canonical/derived split, zoom-out re-snap, anchor
    compensation; invariants A, G and I.
@@ -60,7 +60,9 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
   alike (property-tested at every cap from 1 to 24).
 - **M2: the compositor draws each node's `NodeForm`, which is public and read-only.** `render`
   takes a `forms` callback in place of M1's `labels`, and draws a node's form from the top left
-  of its item's bounds, clipped to them; a node with no form draws nothing. `NodeForm`,
+  of its item's bounds, clipped to them; a node with no form draws nothing. A node's text is
+  part of its `NodeBox` item rather than a separate `Payload::Label`, so ledger row 2's
+  "rendered box == scene bounds == reserved box" holds for one item, not two that must agree. `NodeForm`,
   `FormShape`, `Mark` and `RowLabel` are public because `Compositor` is (scenes are still built
   only inside the crate, so nothing outside can make one); `ResolvedMetrics` stays
   crate-private. `RenderOptions::nodes` is a `NodeGlyphs` (`UNICODE` `[ ] … * •`, `ASCII`
@@ -460,6 +462,15 @@ Plan §19, in the six steps of `## Now`, each green on its own. The milestone cl
   transactions. verify: `cargo test -p catena -- --list | grep -c
   'the_store_matches_a_model_through_any_transactions\|a_failed_transaction_leaves_every_slot_id_and_order_as_it_was\|edges_order_by_their_ends_places_then_insertion_with_ranks_per_unordered_pair\|node_edits_classify_by_what_they_change'
   | grep -qx 4 && cargo test -p catena -- graph:: view::`
+- [x] **Step 2: `ResolvedMetrics`** — one private `measure` over text cells and the semantic
+  zoom table (all six levels live), decorations inside the box, three node forms (glyph, row,
+  bordered `Box` with `word_wrap`); `GraphView` measures each commit and keeps only the reshapes
+  whose box changed (pin moves via `repinned`, property label edits via `relabeled`); the
+  compositor draws forms; invariant N; seed `ui/box_layout.rs` deleted. verify: `cargo test -p
+  catena -- --list | grep -c
+  'invariant_n_every_form_draws_exactly_its_measured_box\|labels_that_lay_out_alike_measure_alike\|applying_a_delta_keeps_only_the_reshapes_that_changed_a_box\|a_pinned_node_at_its_cap_shortens_its_label\|every_commit_is_measured_and_only_boxes_that_changed_stay_reshaped'
+  | grep -qx 5 && cargo test -p catena -- geometry:: scene:: view:: && cargo insta test --check
+  && test -z "$(git ls-files seed/ui/box_layout.rs seed/ui/box_layout_tests.rs)"`
 
 ## Course correction (owner rulings A1–A4)
 
@@ -540,7 +551,10 @@ Each `verify:` lists the named tests first, because a test filter that matches n
 - [ ] **Drop the harvest's dead-code attributes once callers land** — the M0 ports are wired
   to nothing yet, so their modules carry `cfg_attr(not(test), expect(dead_code))`, and `fmath`
   an `allow` (rustc 1.88 does not report it, 1.97 does). Each goes when its engine lands (M2,
-  M4, M5); the `expect`s announce themselves, the `fmath` `allow` will not.
+  M4, M5); the `expect`s announce themselves, the `fmath` `allow` will not. M2 step 2 removed
+  `raster::text`'s and narrowed `geometry::zoom`'s to `MIN_ZOOM`, `MAX_ZOOM` and
+  `SemanticZoomTable::new` (step 4), with `ResolvedMetrics::{level, form, set_level}` waiting on
+  steps 3 to 5.
   verify: `! grep -rn "dead_code" catena/src`
 
 - [ ] **The `png` gallery (plan §16.4)** — `catena-testkit`'s `png` feature: `resvg`
