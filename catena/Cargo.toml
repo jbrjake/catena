@@ -15,6 +15,7 @@ workspace = true
 [dependencies]
 libm.workspace = true
 thiserror.workspace = true
+unicode-width.workspace = true
 
 [dev-dependencies]
 catena-testkit.workspace = true

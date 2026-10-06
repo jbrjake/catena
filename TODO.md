@@ -5,12 +5,12 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-M0 step 4, `word_wrap`: copy `seed/ui/box_layout.rs` and `box_layout_tests.rs` to
-`catena/src/raster/text.seed.rs` and `text_tests.seed.rs` (commit 1, see Decisions: the seed
-files stay), then port (commit 2) to `text.rs` keeping only `word_wrap` and its nine tests, in
-display columns via `unicode-width` (enters `catena`'s dependencies here), with the §18
-semantics and the Decisions' details. Red first: CJK/emoji/combining-mark cases and `\n`
-paragraphs fail on the seed's `chars().count()` version; add an every-line-fits property.
+M0 step 4, tree: `git mv seed/graph/tree_layout.rs` and `tree_layout_tests.rs` to
+`catena/src/layout/tree/tree_layout.seed.rs` and `tree_layout_tests.seed.rs` (commit 1), then
+port (commit 2): fix the "Walker O(n)" header (it is naive centered-parent subtree packing,
+plan §9.3), drop `route_connectors`'s unused `_root` and `_h_gap`, and make the `i16`
+arithmetic saturate instead of overflowing (red first: a tall chain whose depth offsets pass
+`i16::MAX` panics in the seed). The spanning-forest guard and scene wiring are M4.
 
 ## Decisions
 
@@ -105,7 +105,7 @@ paragraphs fail on the seed's `chars().count()` version; add an every-line-fits 
   verify: `cargo test -p catena zoom && test -z "$(git ls-files seed/graph/zoom.rs)"`
 - [x] **Harvest flex** → `catena/src/layout/layered/flex.rs`, overflow comment corrected and
   pinned. verify: `cargo test -p catena flex && test -z "$(git ls-files seed/ui/flex_layout.rs)"`
-- [ ] **Harvest `word_wrap`** → `catena/src/raster/text.rs`, in display columns with the §18
+- [x] **Harvest `word_wrap`** → `catena/src/raster/text.rs`, in display columns with the §18
   semantics. verify: `cargo test -p catena text`
 - [ ] **Harvest tree_layout + tests** → `catena/src/layout/tree/`, header fixed, unused parameters
   removed. verify: `cargo test -p catena tree && test -z "$(git ls-files seed/graph/tree_layout.rs

@@ -19,6 +19,8 @@ libm = "0.2"
 proptest = { version = "1.11", default-features = false, features = ["std"] }
 ratatui-core = "0.1"
 thiserror = "2"
+# Only `width()`; the default `cjk` feature adds ambiguous-width tables catena does not use.
+unicode-width = { version = "0.2", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

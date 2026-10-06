@@ -52,6 +52,7 @@ dependencies = [
  "libm",
  "proptest",
  "thiserror",
+ "unicode-width",
 ]
 
 [[package]]
