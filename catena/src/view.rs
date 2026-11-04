@@ -1,18 +1,19 @@
 //! [`GraphView`], the one object a host holds (plan §4.2, §13): the graph store, every node's
-//! measured box, its layout and the viewport it is drawn in, and with later milestones its
-//! controller and caches.
+//! measured box, its layout, the viewport it is drawn in and the controller that interaction
+//! drives (`interact::controller`), and with later milestones its caches.
 
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use crate::draw::{self, Drawing};
-use crate::geometry::cell::{CellPt, SubPt};
+use crate::geometry::cell::SubPt;
 use crate::geometry::{
     DEFAULT_ZOOM, Fit, Grid, ResolvedMetrics, SemanticZoomTable, Viewport, placement_order,
 };
 use crate::graph::{
     Delta, DeltaClass, EdgeId, EdgeRef, GraphError, GraphStore, Key, Limits, NodeIx, Tx,
 };
+use crate::interact::controller::Controller;
 use crate::interact::hit::Hit;
 use crate::layout::LayoutKind;
 use crate::layout::force::{Change, ForceState, Frame, lay_out};
@@ -46,15 +47,16 @@ pub struct GraphView<K: Key> {
     pending: Delta,
     layout: LayoutKind,
     /// The force layout's world positions and what it keeps between runs.
-    force: ForceState,
+    pub(crate) force: ForceState,
     pub(crate) viewport: Viewport,
-    /// The node a relayout keeps where it is drawn (plan §6, anchor compensation); the
-    /// controller (M3) sets it.
-    focus: Option<NodeIx>,
+    /// What interaction keeps: selection, hover, drag, glides and the key table. Its
+    /// selected node is the one a relayout keeps where it is drawn (plan §6, anchor
+    /// compensation).
+    pub(crate) controller: Controller,
     /// How frames are drawn.
     pub(crate) render_options: RenderOptions,
     /// The scene and compositor frames reuse.
-    drawing: Drawing,
+    pub(crate) drawing: Drawing,
 }
 
 /// Configures a [`GraphView`]; `GraphView::builder().build()` is a complete configuration.
@@ -130,7 +132,7 @@ impl<K: Key> GraphViewBuilder<K> {
             layout: self.layout,
             force: ForceState::default(),
             viewport: Viewport::new(grid, self.fit),
-            focus: None,
+            controller: Controller::default(),
             render_options: RenderOptions {
                 blitter: self.blitter,
                 cell_aspect: self.cell_aspect,
@@ -170,7 +172,8 @@ impl<K: Key> GraphView<K> {
     /// Runs one all-or-nothing transaction. When `f` returns `Ok`, everything it did commits
     /// at once, and the layout catches up before this returns (plan §4.2): a node or edge
     /// added or removed relayouts, a box or pin that changed re-snaps, and anything else moves
-    /// nothing. When `f` returns `Err` (or panics), nothing it did happened.
+    /// nothing. When `f` returns `Err` (or panics), nothing it did happened. A selected,
+    /// hovered or dragged node the commit removed is no longer selected, hovered or dragged.
     ///
     /// # Errors
     ///
@@ -180,6 +183,7 @@ impl<K: Key> GraphView<K> {
         f: impl FnOnce(&mut Tx<'_, K>) -> Result<T, GraphError<K>>,
     ) -> Result<T, GraphError<K>> {
         let (out, mut delta) = self.store.transact(f)?;
+        self.controller.forget(&self.store, &delta);
         self.metrics.apply(&self.store, &mut delta);
         self.pending.absorb(delta);
         self.catch_up();
@@ -218,20 +222,24 @@ impl<K: Key> GraphView<K> {
     }
 
     /// Where node `ix`'s anchor, the middle of its box, is drawn now.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the controller (M3) hit-tests against anchors")
-    )]
-    pub(crate) fn cell(&self, ix: NodeIx) -> Option<CellPt> {
+    #[cfg(test)]
+    pub(crate) fn cell(&self, ix: NodeIx) -> Option<crate::geometry::cell::CellPt> {
         self.viewport.cell(ix)
     }
 
     /// The scene as the view draws it now (plan §7.4): every node's box and every edge's
-    /// route, in viewport cells.
+    /// route, in viewport cells, with what the controller marks marked.
     #[must_use]
     pub fn scene(&self) -> SceneGraph {
         let mut scene = SceneGraph::new();
-        draw::build(&self.store, &self.metrics, &self.viewport, &mut scene);
+        let marks = self.controller.marks(&self.store);
+        draw::build(
+            &self.store,
+            &self.metrics,
+            &self.viewport,
+            marks,
+            &mut scene,
+        );
         scene
     }
 
@@ -248,28 +256,23 @@ impl<K: Key> GraphView<K> {
         compositor.render(scene, surface, &self.render_options, draw::style, |ix| {
             metrics.form(ix)
         });
+        self.drawing.shown = true;
     }
 
     /// What cell `(x, y)` of the surface points at (plan §10.2), in the scene as drawn now.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the controller (M3 step 3) hit-tests pointer events"
-        )
-    )]
     pub(crate) fn hit(&mut self, x: u16, y: u16) -> Option<Hit<'_>> {
         self.refresh();
         self.drawing.hits.hit(&self.drawing.scene, (x, y))
     }
 
     /// Rebuilds the kept scene and its hit map if the view changed since they were built.
-    fn refresh(&mut self) {
+    pub(crate) fn refresh(&mut self) {
         if self.drawing.current {
             return;
         }
         let Drawing { scene, hits, .. } = &mut self.drawing;
-        draw::build(&self.store, &self.metrics, &self.viewport, scene);
+        let marks = self.controller.marks(&self.store);
+        draw::build(&self.store, &self.metrics, &self.viewport, marks, scene);
         let grid = self.viewport.grid();
         let viewport = &self.viewport;
         hits.rebuild(scene, (grid.cols, grid.rows), grid.cell_aspect, |ix| {
@@ -287,7 +290,6 @@ impl<K: Key> GraphView<K> {
     }
 
     /// Moves the view by `(dx, dy)` cells; no layout runs (plan §11.2).
-    #[cfg_attr(not(test), expect(dead_code, reason = "the controller (M3) pans"))]
     pub(crate) fn pan_by(&mut self, delta: (f64, f64)) {
         self.viewport.pan_by(delta);
         self.drawing.invalidate();
@@ -297,7 +299,6 @@ impl<K: Key> GraphView<K> {
     /// relayouts around the nodes whose boxes collapsed or expanded (owner, "Relayout");
     /// within a level no layout runs, and a zoom out re-snaps only the nodes whose boxes would
     /// meet (plan §6).
-    #[cfg_attr(not(test), expect(dead_code, reason = "the controller (M3) zooms"))]
     pub(crate) fn zoom_about(&mut self, zoom: f64, about: SubPt) {
         self.viewport.zoom_about(zoom, about);
         self.drawing.invalidate();
@@ -338,7 +339,8 @@ impl<K: Key> GraphView<K> {
 
     /// Re-snaps after boxes or pins changed, placing a moved pin's node at it; a re-snap that
     /// pushes more than `CASCADE_LIMIT` nodes aside relayouts around the changed boxes
-    /// instead (plan §4.2).
+    /// instead (plan §4.2). A selected node the edit repinned is not kept where it was drawn:
+    /// the pin moving it is the edit, and keeping it would pan every other node instead.
     fn resnap(&mut self, delta: &Delta) {
         for &ix in &delta.repinned {
             let pin = self.store.node(ix).and_then(|node| node.spec.pinned);
@@ -348,19 +350,19 @@ impl<K: Key> GraphView<K> {
         }
         let changed: BTreeSet<NodeIx> = delta.reshaped.union(&delta.repinned).copied().collect();
         let order = placement_order(&self.store);
-        let pushed = self.viewport.resnap(
-            &changed,
-            &self.force.positions,
-            &self.metrics,
-            &order,
-            self.focus,
-        );
+        let keep = self
+            .controller
+            .selected
+            .filter(|ix| !delta.repinned.contains(ix));
+        let pushed =
+            self.viewport
+                .resnap(&changed, &self.force.positions, &self.metrics, &order, keep);
         if pushed.len() > CASCADE_LIMIT {
             self.relayout(Change::Reshaped(&changed));
         }
     }
 
-    /// Runs the layout after `change` and snaps the result, keeping the focused node where it
+    /// Runs the layout after `change` and snaps the result, keeping the selected node where it
     /// is drawn.
     fn relayout(&mut self, change: Change<'_>) {
         let grid = self.viewport.grid();
@@ -381,8 +383,12 @@ impl<K: Key> GraphView<K> {
             &mut self.force,
         );
         let order = placement_order(&self.store);
-        self.viewport
-            .refit(&self.force.positions, &self.metrics, &order, self.focus);
+        self.viewport.refit(
+            &self.force.positions,
+            &self.metrics,
+            &order,
+            self.controller.selected,
+        );
     }
 }
 

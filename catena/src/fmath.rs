@@ -24,13 +24,6 @@ pub(crate) fn atan2(y: f64, x: f64) -> f64 {
 }
 
 /// `e` raised to `x`, with the same bits on every platform.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the zoom glide calls it once the controller (M3 step 3) runs"
-    )
-)]
 pub(crate) fn exp(x: f64) -> f64 {
     libm::exp(x)
 }

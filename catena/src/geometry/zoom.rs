@@ -8,23 +8,9 @@
 
 /// The smallest zoom the controller allows (the seed's `zoom_out` clamp in
 /// `seed/app/navigation.rs`).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the viewport clamps to it; the controller (M3) is the first to zoom"
-    )
-)]
 pub(crate) const MIN_ZOOM: f64 = 0.1;
 
 /// The largest zoom the controller allows (the seed's `zoom_in` clamp).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the viewport clamps to it; the controller (M3) is the first to zoom"
-    )
-)]
 pub(crate) const MAX_ZOOM: f64 = 4.0;
 
 /// The zoom a view starts at: one world unit to one cell column, which semantic zoom shows at

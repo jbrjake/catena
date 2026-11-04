@@ -4,8 +4,11 @@
 //! and writes `tests/visual/{name}.fail.svg`; `CATENA_UPDATE_SNAPSHOTS=1` re-baselines.
 
 use std::collections::BTreeSet;
+use std::time::Duration;
 
 use catena::GraphView;
+use catena::geometry::cell::CellBox;
+use catena::interact::{Button, InputEvent, Outcome, Redraw};
 use catena::raster::{Blitter, CellGrid, SubCellCanvas, polyline_pixels};
 use catena::scene::{EdgeRoute, Payload, Route};
 use catena_testkit::braille_asserts::{
@@ -37,15 +40,57 @@ fn the_community_graph_draws_as_committed() {
 }
 
 #[test]
-fn a_quiescent_view_redrawn_fifty_times_changes_no_cell() {
+fn the_community_graph_draws_its_hover_lift_and_selection_as_committed() {
+    // Owner ruling A4: hover-lift in the T3 goldens. The first node in canonical order is
+    // hovered, its edges lifted; the last is selected.
+    let mut gv = community()
+        .view(GraphView::builder())
+        .expect("fixtures are consistent");
+    let mut grid = CellGrid::new(120, 40);
+    gv.render(&mut grid);
+    let boxes: Vec<CellBox> = gv
+        .scene()
+        .items()
+        .iter()
+        .filter(|item| matches!(item.payload, Payload::NodeBox { .. }))
+        .map(|item| item.bounds)
+        .collect();
+    let middle = |b: CellBox| {
+        let x = b.x + i32::try_from(b.width / 2).expect("narrow");
+        (
+            u16::try_from(x).expect("on"),
+            u16::try_from(b.y).expect("on"),
+        )
+    };
+    let (x, y) = middle(*boxes.last().expect("nodes"));
+    let pressed = gv.handle(InputEvent::MouseDown(x, y, Button::Left));
+    assert!(
+        matches!(pressed[..], [Outcome::Selected(Some(_))]),
+        "{pressed:?}"
+    );
+    gv.handle(InputEvent::MouseUp(x, y, Button::Left));
+    let (x, y) = middle(boxes[0]);
+    let hovered = gv.handle(InputEvent::MouseMove(x, y));
+    assert!(
+        matches!(hovered[..], [Outcome::Hovered(Some(_))]),
+        "{hovered:?}"
+    );
+    gv.render(&mut grid);
+    assert_visual_snapshot(&grid, "community_hover_braille");
+}
+
+#[test]
+fn a_quiescent_view_ticked_and_redrawn_fifty_times_changes_no_cell() {
     // Plan §16.5's steady state: no hidden time, iteration order or reused canvas may leak into
-    // a frame. Until M3's `tick`, nothing advances between frames at all.
+    // a frame, and a tick with nothing animating moves nothing and asks for no frame.
     for graph in [community(), generated(5, 80)] {
         let mut gv = graph
             .view(GraphView::builder())
             .expect("fixtures are consistent");
         let frames: Vec<CellGrid> = (0..50)
-            .map(|_| {
+            .map(|i| {
+                let redraw = gv.tick(Duration::from_millis(16));
+                assert_eq!(redraw == Redraw::Idle, i > 0, "tick {i}");
                 let mut grid = CellGrid::new(100, 30);
                 gv.render(&mut grid);
                 grid

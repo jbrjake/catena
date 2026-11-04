@@ -266,6 +266,56 @@ fn a_resize_keeps_the_snap_until_a_refit_spreads_it() {
     assert_eq!((rows(&before), rows(&after)), (21, 45));
 }
 
+fn near(a: (f64, f64), b: (f64, f64)) -> bool {
+    (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9
+}
+
+#[test]
+fn the_world_point_under_a_view_point_keeps_through_a_zoom_about_it() {
+    // Scroll zoom holds the point under the cursor (plan §10.1); a drag pins a node at the
+    // world point under the pointer, so the inverse must agree with what is drawn.
+    let (store, metrics) = store(&["a", "b", "c", "d"]);
+    let mut view = Viewport::new(GRID, Fit::Contain);
+    assert_eq!(
+        view.world_at(SubPt::new(3.0, 3.0)),
+        None,
+        "nothing fitted yet"
+    );
+    view = fitted(&store, &metrics, &SPREAD);
+    view.pan_by((4.2, -1.3));
+    let cursor = SubPt::new(57.0, 6.0);
+    let under = view.world_at(cursor).expect("fitted");
+    view.zoom_about(2.3, cursor);
+    assert!(near(view.world_at(cursor).expect("fitted"), under));
+    // And a pan carries the world point with it.
+    view.pan_by((5.0, 2.0));
+    let moved = SubPt::new(cursor.x + 5.0, cursor.y + 2.0);
+    assert!(near(view.world_at(moved).expect("fitted"), under));
+}
+
+#[test]
+fn a_drawn_node_unplaces_to_within_its_two_roundings_of_its_world_point() {
+    // A drawn cell is rounded twice: once into its canonical cell, an error the zoom ratio
+    // then scales, and once more as it is derived. So it lies within ½ + ½ / ratio canonical
+    // cells of the exact point. The fit spreads SPREAD's 40 world units over 21 rows (the
+    // grid's height less the margins and the one-row box) and, with the same scale, 42
+    // columns: 40/21 units a row and 40/42 a column.
+    let (store, metrics) = store(&["a", "b", "c", "d"]);
+    let mut view = fitted(&store, &metrics, &SPREAD);
+    view.pan_by((6.6, 3.4));
+    view.zoom_about(1.5, SubPt::new(20.0, 10.0));
+    let slack = 0.5 + 0.5 / 1.5;
+    let (per_col, per_row) = (40.0 / 42.0 * slack, 40.0 / 21.0 * slack);
+    for (i, &(x, y)) in SPREAD.iter().enumerate() {
+        let drawn = view.cell(ix(&store, i)).expect("placed");
+        let (wx, wy) = view.world_at(SubPt::from(drawn)).expect("fitted");
+        assert!(
+            (wx - x).abs() <= per_col && (wy - y).abs() <= per_row,
+            "n{i}: {wx}, {wy}"
+        );
+    }
+}
+
 proptest! {
     #[test]
     fn zooming_in_never_makes_boxes_meet(

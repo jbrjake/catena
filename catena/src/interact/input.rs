@@ -111,9 +111,11 @@ pub enum InputEvent {
     MouseDown(u16, u16, Button),
     /// A button came up at `(column, row)`.
     MouseUp(u16, u16, Button),
-    /// The pointer moved to `(column, row)`.
+    /// The pointer moved to `(column, row)`, with or without a button held: a drag is these
+    /// between a `MouseDown` and its `MouseUp`.
     MouseMove(u16, u16),
-    /// The wheel turned by `notches` (positive away from the user) at `(column, row)`.
+    /// The wheel turned by `notches` (positive away from the user, which zooms in) at
+    /// `(column, row)`.
     Scroll(i8, u16, u16),
     /// The surface is now `(columns, rows)`.
     Resize(u16, u16),

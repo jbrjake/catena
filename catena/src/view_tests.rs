@@ -3,7 +3,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use super::*;
 use crate::ForceParams;
 use crate::geometry::NodeForm;
-use crate::geometry::cell::CellBox;
+use crate::geometry::cell::{CellBox, CellPt};
 use crate::graph::{EdgeSpec, NodeShape, NodeSpec};
 
 fn two_nodes() -> GraphView<String> {
@@ -216,7 +216,7 @@ fn invariant_g_a_relayout_keeps_the_focused_node_where_it_is_drawn() {
     let mut gv = grid(4);
     gv.pan_by((2.5, 1.0));
     let focus = gv.node_ix(&"2.1".to_string()).expect("live");
-    gv.focus = Some(focus);
+    gv.controller.selected = Some(focus);
     let before = gv.cell(focus).expect("drawn");
     gv.update(|tx| {
         tx.add_node("new".to_string(), NodeSpec::label("a new node"))?;
@@ -234,6 +234,55 @@ fn invariant_g_a_relayout_keeps_the_focused_node_where_it_is_drawn() {
     })
     .expect("fresh key, known ends");
     assert_eq!(gv.cell(focus), Some(before));
+}
+
+#[test]
+fn repinning_the_focused_node_moves_it_and_not_the_view() {
+    // Anchor compensation keeps the focused node still through edits that move it only
+    // incidentally. A pin that moves it is the edit: compensating it would pan every other
+    // node instead, which is what a drag of the selected node would show.
+    let mut gv = grid(4);
+    let keys: Vec<String> = (0..16).map(|i| format!("{}.{}", i / 4, i % 4)).collect();
+    let focus = gv.node_ix(&"2.1".to_string()).expect("live");
+    gv.controller.selected = Some(focus);
+    let before: Vec<CellPt> = keys
+        .iter()
+        .map(|k| gv.cell(gv.node_ix(k).expect("live")).expect("drawn"))
+        .collect();
+    let world = gv.force.positions.clone();
+    let at = gv.cell(focus).expect("drawn");
+    let pin = gv
+        .viewport
+        .world_at(SubPt::new(f64::from(at.x), f64::from(at.y) + 3.0))
+        .expect("fitted");
+    gv.update(|tx| tx.set_node(&"2.1".to_string(), |n| n.pinned = Some(pin)))
+        .expect("known");
+    let displaced = gv.viewport.canonical().displaced.clone();
+    assert!(
+        displaced.len() <= CASCADE_LIMIT,
+        "no relayout: {displaced:?}"
+    );
+    let others = |slot: usize| slot != focus.slot();
+    assert!(
+        (0..world.len())
+            .filter(|&s| others(s))
+            .all(|s| gv.force.positions[s] == world[s]),
+        "the layout did not run"
+    );
+    assert_ne!(gv.cell(focus), Some(at), "the pinned node moved");
+    let mut kept = 0;
+    for (k, b) in keys.iter().zip(&before) {
+        let ix = gv.node_ix(k).expect("live");
+        if ix != focus && !displaced.contains(&ix) {
+            assert_eq!(
+                gv.cell(ix),
+                Some(*b),
+                "{k} was not pushed, so it is drawn where it was"
+            );
+            kept += 1;
+        }
+    }
+    assert!(kept >= 10, "only {kept} of 15 kept");
 }
 
 /// Replays what `update` does after an edit that changed `changed`'s boxes or pins, on the

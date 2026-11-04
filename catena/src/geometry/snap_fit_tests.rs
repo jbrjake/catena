@@ -171,6 +171,26 @@ fn zoom_scales_the_fit_about_the_margin() {
     }
 }
 
+#[test]
+fn a_fit_with_no_spread_unplaces_to_the_nodes_own_point() {
+    // One node: every world point lands on the middle, so the node's own is the one returned.
+    let store = store(&labels(&["a"]), &[]);
+    let metrics = metrics(&store);
+    let transform = Transform::of(
+        &world(&store, &[(123.0, -4.0)]),
+        &metrics,
+        GRID,
+        Fit::Contain,
+    )
+    .expect("fit");
+    assert_eq!(
+        transform.unplace(SubPt::new(3.0, 70.0), 2.0),
+        Some((123.0, -4.0))
+    );
+    assert_eq!(transform.unplace(SubPt::new(3.0, 7.0), 0.0), None);
+    assert_eq!(transform.unplace(SubPt::new(3.0, 7.0), f64::NAN), None);
+}
+
 #[expect(clippy::cast_possible_truncation, reason = "small whole numbers")]
 fn to_cells(v: f64) -> i32 {
     v as i32
@@ -185,5 +205,21 @@ proptest! {
         // Plan §16.2-I.
         let c = CellPt::new(x, y);
         prop_assert_eq!(derive(c, 1.0, (0.0, 0.0)), c);
+    }
+
+    #[test]
+    fn unplace_inverts_place(
+        x in -1_000.0f64..1_000.0,
+        y in -1_000.0f64..1_000.0,
+        zoom in 0.1f64..4.0,
+        stretch in any::<bool>(),
+    ) {
+        let store = store(&labels(&["a", "b"]), &[]);
+        let metrics = metrics(&store);
+        let fit = if stretch { Fit::Stretch } else { Fit::Contain };
+        let points = world(&store, &[(-50.0, 10.0), (200.0, 90.0)]);
+        let transform = Transform::of(&points, &metrics, GRID, fit).expect("fit");
+        let back = transform.unplace(transform.place((x, y), zoom), zoom).expect("inverse");
+        prop_assert!((back.0 - x).abs() < 1e-9 && (back.1 - y).abs() < 1e-9, "{back:?}");
     }
 }

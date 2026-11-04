@@ -5,30 +5,24 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**M2 is closed; M3 (interaction + widget + demo, plan §19) is next.** A view lays out, snaps
-and draws (`render`, `render_to_string`); T3 and T4 hold its frames to committed hashes on
-every platform; a steady frame allocates nothing; the benches sit inside every §15.1 budget
-under the perf ratchet. The joined-islands pull the owner ruled for has landed switched off,
-waiting on the owner's call about its cost to invariant F (`## Owner`).
+**M3 (interaction + widget + demo, plan §19) is under way: steps 1 to 3 have landed, and
+step 4, the widget crate, is next.** A view lays out, snaps and draws; T3 and T4 hold its
+frames to committed hashes on every platform; a steady frame allocates nothing; the benches
+sit inside every §15.1 budget. It now takes input: `GraphView::{handle, act, tick}` select,
+hover with A4's hover-lift, pin, drag, cycle, navigate, pan and zoom, with time entering only
+through `tick`. The joined-islands pull the owner ruled for has landed switched off, waiting
+on the owner's call about its cost to invariant F (`## Owner`).
 
 M3 in this order, each step green on its own:
 
-1. The input model (plan §10.1) in `catena/src/interact/`: `InputEvent`, `KeyInput` (`KeyCode`,
-   `Modifiers`), `Button`, `Dir`, `Action`, and the default `Keymap` (`hjkl`/arrows pan, `+`/`-`
-   zoom, `n`/`N` cycle, Shift+arrows spatial nav, Enter pin, Esc clear, and A4's unbundle key).
-2. Hit-testing (plan §10.2): `seed/app/types_excerpt.rs`'s `EdgeSpatialGrid` harvested by the
-   §18 procedure and generalized to nodes; point-in-box over drawn boxes, else the nearest
-   anchor within 3 cells by aspect-corrected distance; edges within 1.5 cells through the grid;
-   the layer, smallest-bounds and sort-tuple priority; `seed/app/selection_excerpt.rs` read,
-   then deleted; invariant J.
-3. The `Controller` (plan §10.1, §10.3, §10.4): selection, hover with A4's hover-lift onto
-   `EdgesOver`, pin, node drag, `n`/`N` cycling and spatial navigation, and the pan glide and
-   zoom smoothing of `seed/app/navigation.rs` ported as free functions over `tick(dt)` (`dt`
-   clamped to 250 ms), with `Outcome`s and `Redraw`; `GraphView::{handle, act, tick}`, which
-   retires the dead-code expectations on `pan_by`, `zoom_about`, `cell` and the zoom clamps;
-   `seed/app/` gone. The anchor-compensation focus is the selected node.
-4. The widget crate: the `Buffer`-backed `Surface` adapter, the `Graph` `StatefulWidget`, and
-   `input::from_crossterm` behind `crossterm`; T5 `TestBackend` snapshots.
+1. ~~The input model~~ (plan §10.1): landed (`## M3`, step 1).
+2. ~~Hit-testing~~ (plan §10.2): landed (`## M3`, step 2).
+3. ~~The `Controller`~~ (plan §10.1, §10.3, §10.4): landed (`## M3`, steps 3a to 3c).
+4. The widget crate: the `Buffer`-backed `Surface` adapter, the `Graph` `StatefulWidget`
+   (rendering through `GraphView::render` and offsetting pointer events by the widget's area,
+   since the core takes surface cells), and `input::from_crossterm` behind `crossterm`, which
+   maps a held-button drag to `MouseMove` and wheel-up to a positive `Scroll`; T5 `TestBackend`
+   snapshots.
 5. `catena-demo` behind `demo`: the community fixture and the 120-node generated one, every
    binding live, `NO_COLOR` read by the bin and turned into the ascii glyphs and blitter.
 6. Minimap and legend behind `widget-extras` (`seed/ui/vector_minimap.rs` read, then deleted).
@@ -37,7 +31,7 @@ M3 in this order, each step green on its own:
 Carried from M2: invariant F is measured on world positions at the later layout's
 `Fit::Contain` scale; with drawing live, read it again on drawn cells, since a refit after a
 node lands outside the old bounding box moves every cell (anchor compensation holds only the
-focused node, which step 3 supplies). The owner ruled on M2's open choices (`owner-rulings.md`,
+selected node). The owner ruled on M2's open choices (`owner-rulings.md`,
 "Relayout follow-ups"): F stays pooled with no per-run floor, joined islands must pull
 together, and the rest stands except fitting islands to the frame, still the owner's question.
 
@@ -70,6 +64,18 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
 
 ## Decisions
 
+- **M3: anchor compensation never keeps a node the commit repinned.** Plan §6 keeps the focused
+  node where it was drawn through a re-snap or refit. When the commit moved that node's pin,
+  the move is the edit: keeping it would pan every other node by the move instead, which is
+  what dragging the selected node showed. Such a re-snap keeps nothing; a relayout it cascades
+  into keeps the node where the re-snap drew it. Seen failing first in
+  `view::tests::repinning_the_focused_node_moves_it_and_not_the_view`.
+- **M3: the controller lives in `GraphView`, not beside it.** Plan §10.1 has
+  `Controller::handle(ev, scene, metrics)`; here `interact::controller::Controller` is the
+  state and `GraphView::{handle, act, tick}` drive it, since every action needs the store,
+  viewport and kept scene together and the plan already has `GraphView` forward to it. A
+  `Redraw` reads the drawing's own `shown` flag, which a frame sets and any change clears, so a
+  hit-test that rebuilds the scene without drawing it cannot make a frame look current.
 - **M2 step 4: `GraphView` catches up at the end of every `update`** (plan §4.2's synchronous
   pacing), consuming `pending`: a `Topology` commit relayouts (`Change::Topology` with the
   absorbed `added`) and refits; a `Geometry` commit puts each repinned node's world position
@@ -885,6 +891,30 @@ own `verify:` under `## Later milestones`.
   to the nearest node ahead in the half-plane; nothing ahead is the boundary; ties go to the
   earlier candidate. Seen failing when the score dropped its angle term. verify: `cargo test -p
   catena --lib -- interact::navigation`
+- [x] **Step 3c: the controller** (plan §10.1, §10.3, §10.4) — `interact::controller` and
+  `interact::pointer`: `GraphView::{handle, act, tick}` returning `Outcome`s and `Redraw`,
+  with `selected`, `selected_edge`, `hovered`, `bundling`, `keymap`, `keymap_mut` and
+  `set_occlusions`. A click selects a node, an edge (the first of a shared segment's) or
+  nothing; a node drag pins the node under the pointer, keeping the grab offset, and on release
+  restores its pin and reports `DragCompleted` with the world point (`Viewport::world_at`, the
+  inverse of the fit, zoom and pan); hovering a node or an edge lifts its edges onto `EdgesOver`
+  in a highlight (A4), in a T2 golden with a style map and a T3 hash; `n`/`N` cycle the sort
+  order, wrapping, and Shift+arrows navigate spatially, both gliding the node to the visible
+  center; Enter pins the selected node where it is drawn, or unpins it; Esc clears; `b` flips
+  `bundling`, which nothing reads until the radial view; keys and the wheel zoom through the
+  glide about the visible center and the pointer; `tick` clamps `dt` to 250 ms and answers
+  `Idle` only when the last frame shows the view. The selected node is the anchor-compensation
+  focus, and a commit that removes a held node forgets it. Retired: the dead-code expectations
+  on `pan_by`, `zoom_about`, the zoom clamps, `fmath::exp`, `animation` and `navigation`; `cell`
+  is test-only. Choices of mine, unratified: a `Pan` moves 4 columns or 2 rows the way it
+  names; node and edge selection exclude each other; a click selects without centering;
+  spatial navigation with nothing selected starts from the visible center; `ToggleBundling`
+  reports no outcome while nothing bundles. Each test was seen failing under a sabotage (the
+  clamp dropped, the pan reversed, occlusions ignored, `N` from none taking the first node,
+  `invalidate` keeping `shown`, a removal not forgotten, the pin not restored, the grab
+  dropped, one-ended hover-lift, a keyboard pin at the layout position, a hover move that
+  invalidates). verify: `cargo test -p catena --lib -- interact:: view::tests::repinning &&
+  cargo test -p catena --test catena -- hover_lift pointer_moving quiescent`
 
 ## Course correction (owner rulings A1–A4)
 
@@ -1015,6 +1045,17 @@ Each `verify:` lists the named tests first, because a test filter that matches n
   rasterizes `grid_to_svg` into a non-gating `tests/gallery/*.png`, regenerated on demand. Lands
   once scenes render (M3 at the latest, with the demo); check `resvg`'s `rust-version` against
   the MSRV first. verify: `cargo test -p catena-testkit --features png png`
+- [ ] **A builder option for the semantic zoom table** — `SemanticZoomTable::new` validates a
+  host's level ceilings and caps but nothing public reaches it, so it still carries a
+  dead-code expectation ("lands with zoom input (M3)"). Zoom input has landed: give
+  `GraphViewBuilder` a `semantic_zoom(upper, caps)` that returns `None` for a table `new`
+  rejects, test it red first, and retire the expectation. verify: `cargo test -p catena --lib
+  -- semantic_zoom && ! grep -n 'lands with zoom input' catena/src/geometry/zoom.rs`
+- [ ] **The radial view reads `GraphView::bundling`** (owner ruling A4) — the unbundle key
+  flips the flag, and nothing draws bundled yet, so it changes no frame and reports no
+  outcome. When the radial layout's bundling lands (plan §9.3, §19 M5), β is 0 while it is
+  off, the toggle invalidates the drawing and reports `ViewChanged`, and a T2 golden shows both.
+  verify: `cargo test -p catena -- bundling_toggle_unbundles`
 
 ## Later milestones
 

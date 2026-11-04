@@ -99,6 +99,14 @@ impl Viewport {
         })
     }
 
+    /// The world point drawn at view point `at` now: the inverse of the last refit's fit, the
+    /// zoom and the pan, before any snapping ([`Transform::unplace`]). `None` before a first
+    /// layout.
+    pub(crate) fn world_at(&self, at: SubPt) -> Option<(f64, f64)> {
+        let transform = self.transform?;
+        transform.unplace(SubPt::new(at.x - self.pan.0, at.y - self.pan.1), self.zoom)
+    }
+
     /// Covers a grid of another size. What it covers is the caller's to lay out and refit.
     pub(crate) fn resize(&mut self, grid: Grid) {
         self.grid = grid;

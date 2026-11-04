@@ -207,6 +207,27 @@ impl Transform {
         )
     }
 
+    /// A world point that [`Transform::place`] puts at `at` at `zoom`: its inverse. On an axis
+    /// the fit gave no scale (every node on one line), every coordinate lands alike and the
+    /// nodes' own one is returned. `None` when the zoom is not positive and finite.
+    pub(crate) fn unplace(&self, at: SubPt, zoom: f64) -> Option<(f64, f64)> {
+        if !(zoom > 0.0 && zoom.is_finite()) {
+            return None;
+        }
+        let margin = f64::from(MARGIN);
+        let back = |view: f64, origin: f64, offset: f64, scale: f64| {
+            if scale == 0.0 {
+                origin
+            } else {
+                origin + ((view - margin) / zoom + margin - offset) / scale
+            }
+        };
+        Some((
+            back(at.x, self.origin.0, self.offset.0, self.scale.0),
+            back(at.y, self.origin.1, self.offset.1, self.scale.1),
+        ))
+    }
+
     /// Each node's anchor in fractional canonical cells at `zoom`, by slot: where its center
     /// in `world` lands.
     pub(crate) fn wanted(
