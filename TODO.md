@@ -43,8 +43,9 @@ M2 in this order, each step green on its own:
    B–E and N on real scenes~~: landed (`## M2`, steps 5a to 5d) as `draw::build`,
    `GraphView::{scene, render, render_to_string}`, `catena/tests/visual/`, the
    `catena-render-hash` bin with `catena-testkit/tests/hashes/`, and the invariant tests.
-6. ~~The zero-allocation frame test~~ (step 6a, `## M2`), the first criterion bench,
-   `scripts/check-perf.sh` with `bench-baseline.json`, and the `coverage` and `bench` CI jobs.
+6. ~~The zero-allocation frame test~~ (step 6a, `## M2`), ~~the first criterion benches~~
+   (6b), `scripts/check-perf.sh` with `bench-baseline.json`, and the `coverage` and `bench` CI
+   jobs.
 
 The owner's crates.io name reservation is still recommended (plan §0); it blocks nothing.
 
@@ -771,6 +772,16 @@ Plan §19, in the six steps of `## Now`, each green on its own. The milestone cl
   a zoom each redraw (each seen failing with its invalidation removed). verify: `cargo test -p
   catena --test catena -- frames:: && cargo test -p catena --lib --
   a_pan_or_a_zoom_redraws_the_kept_scene`
+- [x] **Step 6b: the plan §15.1 benches** — `catena/benches/catena/main.rs` on criterion 0.8
+  (rust-version 1.86; no rayon or plotters), through the public API over generated family 1:
+  `layout/cold_{200,1000}`, `layout/warm_5pct_200`, `frame/{steady,rebuilt}_{200,1000}` into a
+  kept 200 × 50 grid, and `update/property_1000`; the binary then prints its peak resident set
+  (Linux). On this container (`vm`, 4 × Xeon 2.10 GHz, 16 GiB), medians: cold 200 10.4 ms
+  (budget 50), cold 1,000 98.8 ms (400), warm 3.6 ms (10), frame 200 0.94 ms (3), frame 1,000
+  7.7 ms (16), property update 0.66 µs (100); peak RSS 14.7 MiB. A steady frame costs what a
+  rebuilt one does: the compositor dominates, not the scene. Hit-testing (M3) and the layered
+  pipeline (M4) join with their code. verify: `cargo bench -p catena --bench catena -- --list
+  | grep -c ': benchmark' | grep -qx 8`
 - [x] **Pull joined islands together** (`owner-rulings.md`, "Relayout follow-ups") — the owner:
   "it's not okay for islands to be stretched, they need to pull together." `layout/force/merge`
   moves each island a change joins, but the largest, as one rigid body (sliding and turning)

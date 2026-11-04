@@ -15,6 +15,9 @@ repository = "https://github.com/jbrjake/catena"
 # linking the crate, which keeps `unsafe` out of catena's own code.
 allocation-counter = "0.8"
 catena = { path = "catena", version = "0.1.0" }
+# Dev-only: the plan §15.1 benches. Without rayon and plotters, which only parallelize the
+# analysis and draw HTML charts; `cargo_bench_support` is what `cargo bench` needs.
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 # Path only, no version: cargo strips it from `catena`'s published dev-dependencies, which is
 # what lets `catena` publish before the testkit that depends on it (plan §3).
 catena-testkit = { path = "catena-testkit" }

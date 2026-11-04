@@ -20,6 +20,7 @@ unicode-width.workspace = true
 [dev-dependencies]
 allocation-counter.workspace = true
 catena-testkit.workspace = true
+criterion.workspace = true
 insta.workspace = true
 proptest.workspace = true
 
