@@ -67,6 +67,57 @@ pub(crate) fn visible_center((width, height): (u16, u16), occlusions: &[CellBox]
     SubPt::new(sx / f64::from(free), sy / f64::from(free))
 }
 
+/// Half the spatial-navigation cone, as its cosine: ±60° (plan §10.3).
+const CONE_COS: f64 = 0.5;
+
+/// The index in `candidates` of the node spatial navigation moves to from `from` in `dir`
+/// (plan §10.3), or `None` at the graph's edge in that direction.
+///
+/// Offsets are aspect-corrected, a row counting `1 / cell_aspect` columns, so a cell is as far
+/// across as down. A candidate in the ±60° cone around `dir` scores its distance times
+/// `1 + 2(1 − cos θ)`, and the lowest wins. With the cone empty, the nearest candidate ahead
+/// in the half-plane wins. Ties go to the earlier candidate; one at `from` is never taken.
+pub(crate) fn nearest_toward(
+    from: CellPt,
+    dir: super::Dir,
+    candidates: &[CellPt],
+    cell_aspect: f64,
+) -> Option<usize> {
+    let aspect = if cell_aspect.is_finite() && cell_aspect > 0.0 {
+        cell_aspect
+    } else {
+        0.5
+    };
+    let (ux, uy) = match dir {
+        super::Dir::Up => (0.0, -1.0),
+        super::Dir::Down => (0.0, 1.0),
+        super::Dir::Left => (-1.0, 0.0),
+        super::Dir::Right => (1.0, 0.0),
+    };
+    // The best (score, index) in the cone, and the nearest (distance, index) in the half-plane.
+    let mut cone: Option<(f64, usize)> = None;
+    let mut plane: Option<(f64, usize)> = None;
+    for (i, c) in candidates.iter().enumerate() {
+        let (dx, dy) = (f64::from(c.x - from.x), f64::from(c.y - from.y) / aspect);
+        let ahead = dx * ux + dy * uy;
+        if ahead <= 0.0 {
+            continue;
+        }
+        let distance = (dx * dx + dy * dy).sqrt();
+        let cos = ahead / distance;
+        let better = |best: Option<(f64, usize)>, score: f64| best.is_none_or(|(b, _)| score < b);
+        if cos >= CONE_COS {
+            let score = distance * (1.0 + 2.0 * (1.0 - cos));
+            if better(cone, score) {
+                cone = Some((score, i));
+            }
+        } else if better(plane, distance) {
+            plane = Some((distance, i));
+        }
+    }
+    cone.or(plane).map(|(_, i)| i)
+}
+
 #[cfg(test)]
 #[path = "navigation_tests.rs"]
 mod tests;

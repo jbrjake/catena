@@ -4,6 +4,7 @@
 )]
 
 use super::*;
+use crate::interact::Dir;
 
 #[test]
 fn zoom_steps_accumulate_on_the_target_and_stop_at_the_clamp() {
@@ -48,6 +49,56 @@ fn overlapping_windows_count_each_occluded_cell_once() {
     // And windows partly off the frame occlude only their part on it.
     let past = CellBox::new(-40, -5, 80, 40);
     assert_eq!(visible_center((80, 24), &[past]), same);
+}
+
+fn candidates(points: &[(i32, i32)]) -> Vec<CellPt> {
+    points.iter().map(|&(x, y)| CellPt::new(x, y)).collect()
+}
+
+fn nav(from: (i32, i32), dir: Dir, points: &[(i32, i32)]) -> Option<usize> {
+    nearest_toward(CellPt::new(from.0, from.1), dir, &candidates(points), 0.5)
+}
+
+#[test]
+fn spatial_navigation_takes_the_best_scored_node_in_the_cone() {
+    // From (20, 10): straight up 2 rows (4 corrected cells), up-and-right at 45° farther, and
+    // one beside it. Rows count double, as a cell is twice as tall as wide.
+    let points = [(20, 8), (26, 7), (25, 10), (20, 14)];
+    assert_eq!(nav((20, 10), Dir::Up, &points), Some(0));
+    assert_eq!(nav((20, 10), Dir::Right, &points), Some(2));
+    assert_eq!(nav((20, 10), Dir::Down, &points), Some(3));
+}
+
+#[test]
+fn the_angle_costs_more_than_the_distance_saves() {
+    // Up from (20, 10). (20, 7) is 3 rows up, 6 corrected cells dead ahead: it scores 6.
+    // (23, 8) is 3 across and 2 rows (4) up, 5 away at cos θ = 0.8: 5 × (1 + 2 × 0.2) = 7.
+    // The farther, straighter node wins.
+    assert_eq!(nav((20, 10), Dir::Up, &[(20, 7), (23, 8)]), Some(0));
+    // (30, 7) is 10 across and 6 up, about 11.7 away at cos θ ≈ 0.51, still in the cone, but
+    // it scores about 23 against (23, 8)'s 7.
+    assert_eq!(nav((20, 10), Dir::Up, &[(30, 7), (23, 8)]), Some(1));
+}
+
+#[test]
+fn outside_the_sixty_degree_cone_counts_only_when_the_cone_is_empty() {
+    // Right from (10, 10): (12, 13) is 2 across, 3 rows (6) down, about 72° off: out of the
+    // cone. With nothing in it, the half-plane's nearest is taken; anything in the cone wins.
+    assert_eq!(nav((10, 10), Dir::Right, &[(12, 13)]), Some(0));
+    assert_eq!(nav((10, 10), Dir::Right, &[(12, 13), (40, 10)]), Some(1));
+}
+
+#[test]
+fn nothing_ahead_is_the_boundary() {
+    assert_eq!(nav((10, 10), Dir::Left, &[(12, 13), (40, 10)]), None);
+    assert_eq!(nav((10, 10), Dir::Up, &[(10, 10)]), None, "the node itself");
+    assert_eq!(nav((10, 10), Dir::Up, &[]), None);
+}
+
+#[test]
+fn a_tie_goes_to_the_earlier_node() {
+    assert_eq!(nav((10, 10), Dir::Up, &[(12, 9), (8, 9)]), Some(0));
+    assert_eq!(nav((10, 10), Dir::Up, &[(8, 9), (12, 9)]), Some(0));
 }
 
 #[test]

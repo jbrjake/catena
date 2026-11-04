@@ -879,6 +879,12 @@ own `verify:` under `## Later milestones`.
   node when none was selected. The timing tests were seen failing with the seed's fixed 35%
   step. `seed/app/` is gone. verify: `cargo test -p catena --lib -- interact::animation
   interact::navigation && test ! -e seed/app`
+- [x] **Step 3b: spatial navigation** (plan §10.3) — `navigation::nearest_toward`: from the
+  focused node, candidates whose aspect-corrected offset lies in the ±60° cone around the
+  direction score their distance × `1 + 2(1 − cos θ)`, the lowest wins; an empty cone falls back
+  to the nearest node ahead in the half-plane; nothing ahead is the boundary; ties go to the
+  earlier candidate. Seen failing when the score dropped its angle term. verify: `cargo test -p
+  catena --lib -- interact::navigation`
 
 ## Course correction (owner rulings A1–A4)
 
