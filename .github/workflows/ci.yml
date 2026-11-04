@@ -1,5 +1,5 @@
 # CI (plan §17). Every `uses:` is pinned by full commit SHA; the comment names the release.
-# Later milestones add coverage and bench (M2), fuzz (M3) and pty (M5).
+# Later milestones add fuzz (M3) and pty (M5).
 name: ci
 
 on:
@@ -53,6 +53,42 @@ jobs:
           for crate in catena catena-ratatui catena-testkit; do
             cargo msrv verify --manifest-path "$crate/Cargo.toml"
           done
+
+  # Line coverage of catena's own code (plan §17): at least 80%. cargo-llvm-cov leaves test
+  # modules and the other crates out of the count, and builds in its own target directory.
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
+        with:
+          tool: cargo-llvm-cov
+      - name: line coverage of catena, at least 80%
+        shell: bash
+        run: cargo llvm-cov -p catena --summary-only --fail-under-lines 80
+
+  # The perf ratchet (plan §15.1) on pushes to main. A runner is a machine with no committed
+  # baseline entry, so the ratchet seeds one in the runner each time and only the plan §15.1
+  # budgets can fail it; the table it prints is the record. Benchmarks never run in a git hook.
+  bench:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: perf ratchet
+        shell: bash
+        run: bash scripts/check-perf.sh
 
   # DCO plus the contributor license grant (CONTRIBUTING.md): every commit of a pull request
   # from a fork must carry a Signed-off-by trailer. Same-repository branches are the owner's

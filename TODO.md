@@ -43,9 +43,9 @@ M2 in this order, each step green on its own:
    B–E and N on real scenes~~: landed (`## M2`, steps 5a to 5d) as `draw::build`,
    `GraphView::{scene, render, render_to_string}`, `catena/tests/visual/`, the
    `catena-render-hash` bin with `catena-testkit/tests/hashes/`, and the invariant tests.
-6. ~~The zero-allocation frame test~~ (step 6a, `## M2`), ~~the first criterion benches~~
-   (6b), ~~`scripts/check-perf.sh` with `bench-baseline.json`~~ (6c), and the `coverage` and
-   `bench` CI jobs.
+6. ~~The zero-allocation frame test, the first criterion benches, `scripts/check-perf.sh`
+   with `bench-baseline.json`, and the `coverage` and `bench` CI jobs~~: landed (`## M2`, steps
+   6a to 6d).
 
 The owner's crates.io name reservation is still recommended (plan §0); it blocks nothing.
 
@@ -475,6 +475,12 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
 - **Dependencies enter when first used.** `sha2` arrives with the SVG port (M1), `proptest` with
   the first property test; `catena-ratatui` takes `ratatui-core` at M0 so the lockfile pins the
   version whose `rust-version` (1.88) sets the MSRV (plan §3).
+- **CI's `bench` job prints its table and posts nothing.** Plan §17 adds criterion
+  `--save-baseline` with an advisory PR comment past 15%, but the job runs only on pushes to
+  `main`, where there is no PR to comment on; and an artifact upload would need a pinned SHA of
+  `actions/upload-artifact`, a repository outside this session's GitHub scope to look up. A
+  runner has no committed baseline entry, so each run seeds one in the runner and only the
+  §15.1 budgets can fail it. Unratified.
 - **The zero-allocation test counts with `allocation-counter`, not an allocator of our own.**
   Plan §15.2 asks for a counting `#[global_allocator]` in `catena`'s integration target, but
   `GlobalAlloc` takes an `unsafe impl` and the workspace forbids `unsafe_code`, and tests run in
@@ -794,6 +800,11 @@ Plan §19, in the six steps of `## Now`, each green on its own. The milestone cl
   baselines); the ratchet and budget tests were seen failing with each bar loosened. This
   container's entry is seeded, and a second run passed at 1.00–1.06×. verify:
   `./scripts/check-perf.sh && grep -q '"host": "vm"' bench-baseline.json`
+- [x] **Step 6d: the coverage and bench CI jobs** (plan §17) — `coverage` runs `cargo llvm-cov
+  -p catena --summary-only --fail-under-lines 80` on every push and PR (measured here: 97.9% of
+  5,088 lines over catena's 41 production files; the flag was seen exiting 0 at 80 and 1 at
+  99). `bench` runs `scripts/check-perf.sh` on pushes to `main`. verify: the CI run on the
+  commit that adds them shows `coverage` and `bench` with conclusion success.
 - [x] **Pull joined islands together** (`owner-rulings.md`, "Relayout follow-ups") — the owner:
   "it's not okay for islands to be stretched, they need to pull together." `layout/force/merge`
   moves each island a change joins, but the largest, as one rigid body (sliding and turning)
