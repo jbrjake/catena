@@ -13,6 +13,16 @@ cargo-fuzz targets run nightly (`fuzz.yml`). M3's seven steps are `## M3`'s item
 joined-islands pull the owner ruled for has landed switched off, waiting on the owner's call
 about its cost to invariant F (`## Owner`).
 
+First, before any M4 code:
+
+- The owner has not yet confirmed the M4 order below (read back at M3's close, as the
+  baseline's owner-intent rule asks); start once they say go, or reorder as they say.
+- Check that `fuzz.yml`'s first nightly runs (03:41 UTC) passed; it has never run on GitHub,
+  since a manual dispatch was refused (`## Owner`). Its exact command passed locally.
+- A fresh cloud container lacks the fuzz toolchain: `rustup toolchain install nightly
+  --profile minimal && cargo install cargo-fuzz --locked`, then `cd fuzz && cargo +nightly fuzz
+  run fuzz_events -- -runs=10000`. Over the committed corpus that takes about 7 minutes.
+
 M4 in this order, each step green on its own, porting `seed/ui/dag_layout/` selectively (plan
 §18's row: keep the `JunctionKind` table, the flex Y bands, `DagBuilder` and the golden style;
 replace ordering, positioning and routing per §9.1):
@@ -1056,6 +1066,18 @@ Each `verify:` lists the named tests first, because a test filter that matches n
 - [ ] **Reserve the crate names on crates.io** — a real `0.0.0` publish of `catena`,
   `catena-ratatui` and `catena-testkit`; the owner's act, recommended before M1 (plan §0).
   verify: `cargo info catena && cargo info catena-ratatui && cargo info catena-testkit`
+- [ ] **Let the Claude GitHub App run workflows (needs the owner)** — a `workflow_dispatch` of
+  `fuzz.yml` was refused, 403 "Resource not accessible by integration", so a session cannot
+  run the fuzz job on demand or re-run CI. Grant the app Actions write (reconnect at
+  claude.ai/connect-github). verify: a session's dispatch of `fuzz.yml` starts a run
+- [ ] **Ratify M3's choices (needs the owner)** — recorded under `## Decisions` and in the
+  `## M3` items, each marked unratified: pointer events in screen cells through
+  `Surface::origin`; the minimap reading the view rather than rendering it again; the demo on
+  `ratatui-crossterm`; T5 on `ratatui-core`'s `TestBackend`; the push gate's test step gaining
+  `--features catena-ratatui/demo` (an edit to plan §17's command); and the controller's small
+  ones (a pan of 4 columns or 2 rows, keyboard selection gliding to the center and a click
+  not, node and edge selection excluding each other). verify: `grep -c 'Unratified\|unratified'
+  TODO.md` falls as each is confirmed or changed
 
 ## Found while porting
 
