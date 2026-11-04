@@ -5,24 +5,43 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**M2 (graph model + force layout + viewport, plan §19) is under way: steps 1 to 5 are done
-(`## M2` below), so a view lays out, snaps and draws, through `render(surface)` and
-`render_to_string`, with T3 and T4 holding its frames to committed hashes on every platform.
-The joined-islands pull the owner ruled for has landed switched off, waiting on the owner's
-call about its cost to invariant F (`## Owner`). Next is step 6: the zero-allocation frame
-test, the first criterion bench, `scripts/check-perf.sh` with `bench-baseline.json`, and the
-`coverage` and `bench` CI jobs.**
+**M2 is closed; M3 (interaction + widget + demo, plan §19) is next.** A view lays out, snaps
+and draws (`render`, `render_to_string`); T3 and T4 hold its frames to committed hashes on
+every platform; a steady frame allocates nothing; the benches sit inside every §15.1 budget
+under the perf ratchet. The joined-islands pull the owner ruled for has landed switched off,
+waiting on the owner's call about its cost to invariant F (`## Owner`).
 
-A steady frame into a kept surface now allocates nothing (step 6a); `render_to_string` still
-makes its own `CellGrid`, as an export may. Invariant F is measured on world positions at the later
-layout's `Fit::Contain` scale; with drawing live, read it again on drawn cells, since a refit
-after a node lands outside the old bounding box moves every cell (anchor compensation, plan §6,
-holds only the focused node, and there is none until M3's controller). The owner ruled on M2's
-open choices (`owner-rulings.md`, "Relayout follow-ups"): F stays pooled with no per-run
-floor, joined islands must pull together, and the rest stands except fitting islands to the
-frame, which is still the owner's open question.
+M3 in this order, each step green on its own:
 
-M2 in this order, each step green on its own:
+1. The input model (plan §10.1) in `catena/src/interact/`: `InputEvent`, `KeyInput` (`KeyCode`,
+   `Modifiers`), `Button`, `Dir`, `Action`, and the default `Keymap` (`hjkl`/arrows pan, `+`/`-`
+   zoom, `n`/`N` cycle, Shift+arrows spatial nav, Enter pin, Esc clear, and A4's unbundle key).
+2. Hit-testing (plan §10.2): `seed/app/types_excerpt.rs`'s `EdgeSpatialGrid` harvested by the
+   §18 procedure and generalized to nodes; point-in-box over drawn boxes, else the nearest
+   anchor within 3 cells by aspect-corrected distance; edges within 1.5 cells through the grid;
+   the layer, smallest-bounds and sort-tuple priority; `seed/app/selection_excerpt.rs` read,
+   then deleted; invariant J.
+3. The `Controller` (plan §10.1, §10.3, §10.4): selection, hover with A4's hover-lift onto
+   `EdgesOver`, pin, node drag, `n`/`N` cycling and spatial navigation, and the pan glide and
+   zoom smoothing of `seed/app/navigation.rs` ported as free functions over `tick(dt)` (`dt`
+   clamped to 250 ms), with `Outcome`s and `Redraw`; `GraphView::{handle, act, tick}`, which
+   retires the dead-code expectations on `pan_by`, `zoom_about`, `cell` and the zoom clamps;
+   `seed/app/` gone. The anchor-compensation focus is the selected node.
+4. The widget crate: the `Buffer`-backed `Surface` adapter, the `Graph` `StatefulWidget`, and
+   `input::from_crossterm` behind `crossterm`; T5 `TestBackend` snapshots.
+5. `catena-demo` behind `demo`: the community fixture and the 120-node generated one, every
+   binding live, `NO_COLOR` read by the bin and turned into the ascii glyphs and blitter.
+6. Minimap and legend behind `widget-extras` (`seed/ui/vector_minimap.rs` read, then deleted).
+7. The `fuzz/` crate with `fuzz_events` and `fuzz_topology`, and the nightly `fuzz` CI job.
+
+Carried from M2: invariant F is measured on world positions at the later layout's
+`Fit::Contain` scale; with drawing live, read it again on drawn cells, since a refit after a
+node lands outside the old bounding box moves every cell (anchor compensation holds only the
+focused node, which step 3 supplies). The owner ruled on M2's open choices (`owner-rulings.md`,
+"Relayout follow-ups"): F stays pooled with no per-run floor, joined islands must pull
+together, and the rest stands except fitting islands to the frame, still the owner's question.
+
+M2 as it landed, each step green on its own:
 
 1. ~~The graph store~~ (plan §4): landed.
 2. ~~`ResolvedMetrics`~~ (plan §5): landed. `GraphView::pending` now holds every commit's
@@ -804,7 +823,8 @@ Plan §19, in the six steps of `## Now`, each green on its own. The milestone cl
   -p catena --summary-only --fail-under-lines 80` on every push and PR (measured here: 97.9% of
   5,088 lines over catena's 41 production files; the flag was seen exiting 0 at 80 and 1 at
   99). `bench` runs `scripts/check-perf.sh` on pushes to `main`. verify: the CI run on the
-  commit that adds them shows `coverage` and `bench` with conclusion success.
+  commit that adds them shows `coverage` and `bench` with conclusion success (run 41914698918
+  on `337deaa`: every job success).
 - [x] **Pull joined islands together** (`owner-rulings.md`, "Relayout follow-ups") — the owner:
   "it's not okay for islands to be stretched, they need to pull together." `layout/force/merge`
   moves each island a change joins, but the largest, as one rigid body (sliding and turning)
@@ -952,10 +972,13 @@ Each `verify:` lists the named tests first, because a test filter that matches n
 
 ## Later milestones
 
-- [ ] **M2 — Graph model + force layout + viewport** — per plan §19.
-  verify: `cargo test -p catena` reports ≥ 200 passing tests, the stability suite and the
-  cross-run hash test are green, `./scripts/check-perf.sh` exits 0 and wrote this machine's
-  baseline entry, `cargo xtask lint` reports zero `lint-allow` lines for the `fmath` rule
+- [x] **M2 — Graph model + force layout + viewport** — per plan §19. Closed on `main` with:
+  `cargo test -p catena` passing 427 tests, the stability suite and the cross-run hash test
+  green, `./scripts/check-perf.sh` exiting 0 after seeding this machine's entry, and `cargo
+  xtask lint` reporting `lint-allow: none`. verify: `cargo test -p catena` reports ≥ 200
+  passing tests, the stability suite and the cross-run hash test are green,
+  `./scripts/check-perf.sh` exits 0 and wrote this machine's baseline entry, `cargo xtask lint`
+  reports zero `lint-allow` lines for the `fmath` rule
 - [ ] **M3 — Interaction + widget + demo** — per plan §19, with A4's unbundle key and hover-lift
   in the default key table. verify: `cargo test --workspace &&
   cargo build -p catena-ratatui --bin catena-demo --features demo && cargo +nightly fuzz run
