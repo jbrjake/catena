@@ -5,23 +5,26 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**M2 (graph model + force layout + viewport, plan §19) is under way: steps 1 to 4, the graph
-store, `ResolvedMetrics`, the force layout with the relayout rework the owner ruled on, and
-the snapper and viewport, are done (`## M2` below), so `update` now lays out and snaps. The
-joined-islands pull the owner ruled for has landed switched off, waiting on the owner's call
-about its cost to invariant F (`## Owner`). Next is step 5: draw it, layout → `SceneGraph` →
-`render_to_string`.**
+**M2 (graph model + force layout + viewport, plan §19) is under way: steps 1 to 5 are done
+(`## M2` below), so a view lays out, snaps and draws, through `render(surface)` and
+`render_to_string`, with T3 and T4 holding its frames to committed hashes on every platform.
+The joined-islands pull the owner ruled for has landed switched off, waiting on the owner's
+call about its cost to invariant F (`## Owner`). Next is step 6: the zero-allocation frame
+test, the first criterion bench, `scripts/check-perf.sh` with `bench-baseline.json`, and the
+`coverage` and `bench` CI jobs.**
 
-What step 5 inherits: `GraphView::cell(ix)` is where a node's anchor is drawn and
-`Viewport::boxes` every node's drawn box (both waiting on the scene, `expect(dead_code)`);
-`GraphView::resize(cols, rows)` is what a render at its area calls first, a full relayout when
-the size changed, since until the first render a view lays out for 80 × 24. Invariant F is
-measured on world positions at the later layout's `Fit::Contain` scale; with the snapper live,
-read it again on drawn cells, since a refit after a node lands outside the old bounding box
-moves every cell (anchor compensation, plan §6, holds only the focused node, and there is none
-until M3's controller). The owner ruled on M2's open choices (`owner-rulings.md`, "Relayout
-follow-ups"): F stays pooled with no per-run floor, joined islands must pull together, and the
-rest stands except fitting islands to the frame, which is still the owner's open question.
+What step 6 inherits: a frame allocates today. `draw::build` clears the kept scene and pushes
+fresh items, each edge with a new route `Vec`, every frame, and `render_to_string` makes a new
+`CellGrid`; the compositor's own buffers are already reused. Plan §15.2 wants a steady frame to
+allocate nothing, so the scene must be rebuilt only when the layout, viewport or graph changed
+(or its routes' buffers reused), measured by a counting `#[global_allocator]` in `catena`'s
+integration target (its own binary). Invariant F is measured on world positions at the later
+layout's `Fit::Contain` scale; with drawing live, read it again on drawn cells, since a refit
+after a node lands outside the old bounding box moves every cell (anchor compensation, plan §6,
+holds only the focused node, and there is none until M3's controller). The owner ruled on M2's
+open choices (`owner-rulings.md`, "Relayout follow-ups"): F stays pooled with no per-run
+floor, joined islands must pull together, and the rest stands except fitting islands to the
+frame, which is still the owner's open question.
 
 M2 in this order, each step green on its own:
 
@@ -40,10 +43,10 @@ M2 in this order, each step green on its own:
    split, zoom-out re-snap, anchor compensation), and `GraphView` lays out and snaps at the end
    of every `update`. `simulation::Run` takes one step at a time, which is what
    `LayoutPacing::Animated` needs once `tick` exists.
-5. ~~Layout → `SceneGraph` → `render_to_string`, invariants B–D on real scenes~~: landed as
-   `draw::build` and `GraphView::{scene, render, render_to_string}` (`## M2`), with ~~T3 scene
-   snapshots~~ and ~~the T4 tier~~ (the `catena-render-hash` bin, committed hashes, steady
-   state). Left: invariants E and N on real scenes.
+5. ~~Layout → `SceneGraph` → `render_to_string`; T3 scene snapshots; the T4 tier; invariants
+   B–E and N on real scenes~~: landed (`## M2`, steps 5a to 5d) as `draw::build`,
+   `GraphView::{scene, render, render_to_string}`, `catena/tests/visual/`, the
+   `catena-render-hash` bin with `catena-testkit/tests/hashes/`, and the invariant tests.
 6. The zero-allocation frame test, the first criterion bench, `scripts/check-perf.sh` with
    `bench-baseline.json`, and the `coverage` and `bench` CI jobs.
 
@@ -748,6 +751,16 @@ Plan §19, in the six steps of `## Now`, each green on its own. The milestone cl
   verify: `cargo test -p catena-testkit -- determinism:: oscillation:: && cargo test -p catena
   --test catena -- a_quiescent_view_redrawn_fifty_times_changes_no_cell && test -z "$(git
   ls-files seed/tests)"`
+- [x] **Step 5d: invariants E and N on real scenes** — E: every edge of three laid-out
+  generated graphs, drawn alone on a braille canvas, lights exactly its pixel walk clipped to
+  the frame, 8-connected, its on-frame ends lit, no pixel walked twice (seen failing when the
+  canvas dropped one dot; an integration test, since the braille asserts take the testkit's
+  copy of `catena`'s types). N: every node of four generated graphs, whose labels mix CJK,
+  emoji and combining marks, drawn alone fills exactly the cells its box reserves, boxes that
+  cross the frame's edge aside (seen failing with each label's closing bracket dropped). The
+  compositor's cell-to-sub-pixel mapping is now one function. verify: `cargo test -p catena
+  --test catena -- invariant_e_every_drawn_edge_is_one_unbroken_line_between_its_ends && cargo
+  test -p catena --lib -- invariant_n_on_real_scenes_every_box_draws_exactly_its_cells`
 - [x] **Pull joined islands together** (`owner-rulings.md`, "Relayout follow-ups") — the owner:
   "it's not okay for islands to be stretched, they need to pull together." `layout/force/merge`
   moves each island a change joins, but the largest, as one rigid body (sliding and turning)

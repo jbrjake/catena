@@ -4,10 +4,10 @@
 use catena_testkit::fixtures::{FixtureGraph, SplitMix64, generated};
 use insta::assert_snapshot;
 
-use crate::geometry::cell::CellPt;
+use crate::geometry::cell::{CellBox, CellPt};
 use crate::graph::{EdgeSpec, NodeSpec};
-use crate::raster::{Blitter, CellGrid};
-use crate::scene::{EdgeEnds, Layer, Payload, SceneGraph, SceneItem, route_faults};
+use crate::raster::{Blitter, CellGrid, Surface};
+use crate::scene::{Compositor, EdgeEnds, Layer, Payload, SceneGraph, SceneItem, route_faults};
 use crate::{GraphView, GraphViewBuilder};
 
 /// A view of `graph`, nodes added in the order `node_order` gives and edges in `edge_order`
@@ -263,4 +263,64 @@ fn invariant_d_any_insertion_order_draws_the_same_frame() {
             "seed {seed}"
         );
     }
+}
+
+#[test]
+fn invariant_n_on_real_scenes_every_box_draws_exactly_its_cells() {
+    // Plan §16.2-N on real layouts: the generated families' labels mix CJK, emoji and
+    // combining marks, and each node's form, drawn on its own, fills exactly the cells its box
+    // reserves. A box that crosses the frame's edge is left out, since a wide glyph there is
+    // dropped whole.
+    let (cols, rows) = (160u16, 60u16);
+    let mut checked = 0;
+    for seed in 0..4 {
+        let graph = generated(seed, 60);
+        assert!(
+            graph.nodes.iter().any(|n| !n.label.is_ascii()),
+            "seed {seed}"
+        );
+        let mut gv = in_order(&graph);
+        gv.resize(cols, rows);
+        let mut nodes = SceneGraph::new();
+        for item in gv.scene().items() {
+            if matches!(item.payload, Payload::NodeBox { .. }) {
+                nodes.push(item.clone());
+            }
+        }
+        let mut grid = CellGrid::new(cols, rows);
+        let metrics = &gv.metrics;
+        Compositor::new().render(
+            &nodes,
+            &mut grid,
+            &gv.render_options,
+            crate::draw::style,
+            |ix| metrics.form(ix),
+        );
+        let frame = CellBox::new(0, 0, u32::from(cols), u32::from(rows));
+        let inside = |b: &CellBox| {
+            b.x >= 0 && b.y >= 0 && b.right() <= frame.right() && b.bottom() <= frame.bottom()
+        };
+        let (whole, cut): (Vec<CellBox>, Vec<CellBox>) = nodes
+            .items()
+            .iter()
+            .map(|item| item.bounds)
+            .partition(|b| inside(b));
+        assert!(
+            whole.len() > 40,
+            "seed {seed}: {} boxes wholly on frame",
+            whole.len()
+        );
+        for (x, y) in (0..rows).flat_map(|y| (0..cols).map(move |x| (x, y))) {
+            let at = CellPt::new(i32::from(x), i32::from(y));
+            if cut.iter().any(|b| b.contains(at)) {
+                continue;
+            }
+            let reserved = whole.iter().any(|b| b.contains(at));
+            let drawn = grid.cell(x, y).is_some_and(|c| c.fg().is_some());
+            assert_eq!(drawn, reserved, "seed {seed}: ({x}, {y})\n{grid}");
+            checked += 1;
+        }
+        assert_eq!(grid.size(), (cols, rows));
+    }
+    assert!(checked > 10_000, "only {checked} cells checked");
 }

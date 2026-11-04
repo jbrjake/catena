@@ -8,7 +8,7 @@ use super::nodes::{NodeGlyphs, draw_form};
 use super::orthogonal::{Arms, BoxGlyphs};
 use super::{Decoration, EdgeRoute, Layer, Payload, Route, SceneGraph, StyleId};
 use crate::geometry::NodeForm;
-use crate::geometry::cell::CellBox;
+use crate::geometry::cell::{CellBox, SubPt};
 use crate::graph::NodeIx;
 use crate::raster::{
     Blitter, CellStyle, ColorSlot, LineGlyphs, SubCellCanvas, Surface, text_cells,
@@ -102,17 +102,9 @@ impl Compositor {
                 };
                 match route {
                     Route::Polyline(points) => {
-                        let (sub_w, sub_h) = options.blitter.sub_size();
-                        let (sub_w, sub_h) = (f64::from(sub_w), f64::from(sub_h));
                         self.points.clear();
-                        // A point lies in the cell it rounds to: centre it in that cell's
-                        // sub-pixels.
-                        self.points.extend(points.iter().map(|p| {
-                            (
-                                p.x * sub_w + (sub_w - 1.0) / 2.0,
-                                p.y * sub_h + (sub_h - 1.0) / 2.0,
-                            )
-                        }));
+                        self.points
+                            .extend(points.iter().map(|&p| sub_pixel(p, options.blitter)));
                         canvas.set_pen(ColorSlot(item.style.0));
                         canvas.draw_polyline(&self.points);
                     }
@@ -247,6 +239,17 @@ impl Compositor {
         let (y0, y1) = clamp(i64::from(bounds.y), bounds.bottom(), rows);
         (y0..y1).flat_map(move |y| (x0..x1).map(move |x| (x, y)))
     }
+}
+
+/// Where `point`, in cells, lies on `blitter`'s sub-pixel grid. A point lies in the cell it
+/// rounds to, so it is centred in that cell's sub-pixels.
+fn sub_pixel(point: SubPt, blitter: Blitter) -> (f64, f64) {
+    let (sub_w, sub_h) = blitter.sub_size();
+    let (sub_w, sub_h) = (f64::from(sub_w), f64::from(sub_h));
+    (
+        point.x * sub_w + (sub_w - 1.0) / 2.0,
+        point.y * sub_h + (sub_h - 1.0) / 2.0,
+    )
 }
 
 /// Writes `text` from cell `(x, y)` rightwards, cell by cell as `text_cells` splits it, keeping
