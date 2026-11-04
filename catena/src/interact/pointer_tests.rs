@@ -8,7 +8,7 @@ use super::*;
 use crate::draw::{EDGE, EDGE_LIFTED, EDGE_SELECTED, NODE_SELECTED};
 use crate::geometry::cell::{CellBox, CellPt};
 use crate::interact::{Button, InputEvent};
-use crate::raster::{Attrs, CellGrid, PaletteColor};
+use crate::raster::{Attrs, CellGrid, CellStyle, PaletteColor, Surface};
 use crate::scene::{Layer, Payload, StyleId};
 
 fn x(at: CellPt) -> u16 {
@@ -273,6 +273,74 @@ fn a_pinned_node_dragged_stays_pinned_where_it_was_dropped() {
         gv.store.node(ix(&gv, 2)).expect("live").spec.pinned,
         Some(world)
     );
+}
+
+/// A grid seen as the region of a larger screen at `origin`, as a widget's area is.
+struct Region<'g> {
+    grid: &'g mut CellGrid,
+    origin: (u16, u16),
+}
+
+impl Surface for Region<'_> {
+    fn size(&self) -> (u16, u16) {
+        self.grid.size()
+    }
+
+    fn origin(&self) -> (u16, u16) {
+        self.origin
+    }
+
+    fn put(&mut self, x: u16, y: u16, symbol: &str, style: CellStyle) {
+        self.grid.put(x, y, symbol, style);
+    }
+
+    fn patch_bg(&mut self, x: u16, y: u16, bg: PaletteColor) {
+        self.grid.patch_bg(x, y, bg);
+    }
+}
+
+#[test]
+fn on_a_region_of_the_screen_pointer_events_arrive_in_screen_cells() {
+    // A widget draws in an area of the terminal, and the terminal reports the pointer in its
+    // own cells: the view takes the surface's origin from the last frame and subtracts it.
+    let mut gv = pinned(&STAR, &SPOKES);
+    let mut grid = CellGrid::new(80, 24);
+    gv.render(&mut Region {
+        grid: &mut grid,
+        origin: (30, 6),
+    });
+    let n2 = cell(&gv, 2);
+    let on_screen = offset(n2, 30, 6);
+    assert_eq!(
+        gv.handle(down(on_screen)),
+        [Outcome::Selected(Some(ix(&gv, 2)))]
+    );
+    gv.handle(up(on_screen));
+    // Off the region: a press or a scroll there is another widget's, and the pointer leaving
+    // it hovers nothing.
+    assert_eq!(gv.handle(down(CellPt::new(5, 2))), [], "left of the region");
+    assert_eq!(gv.handle(down(CellPt::new(115, 10))), [], "right of it");
+    assert_eq!(gv.handle(InputEvent::Scroll(1, 5, 2)), []);
+    assert_eq!(gv.selected(), Some(ix(&gv, 2)));
+    let n1 = offset(cell(&gv, 1), 30, 6);
+    assert_eq!(gv.handle(to(n1)), [Outcome::Hovered(Some(ix(&gv, 1)))]);
+    assert_eq!(gv.handle(to(CellPt::new(2, 2))), [Outcome::Hovered(None)]);
+}
+
+#[test]
+fn a_drag_past_the_region_s_edge_holds_the_node_at_the_edge() {
+    let mut gv = pinned(&STAR, &SPOKES);
+    let mut grid = CellGrid::new(80, 24);
+    gv.render(&mut Region {
+        grid: &mut grid,
+        origin: (30, 6),
+    });
+    let n1 = cell(&gv, 1);
+    gv.handle(down(offset(n1, 30, 6)));
+    gv.handle(to(CellPt::new(3, offset(n1, 30, 6).y)));
+    assert_eq!(cell(&gv, 1), CellPt::new(0, n1.y), "clamped to column 0");
+    let out = gv.handle(up(CellPt::new(1, offset(n1, 30, 6).y)));
+    assert!(matches!(out[..], [Outcome::DragCompleted(..)]), "{out:?}");
 }
 
 #[test]

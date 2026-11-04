@@ -67,6 +67,19 @@ fn a_character_key_matches_whatever_shift_the_terminal_reports() {
 }
 
 #[test]
+fn back_tab_is_shift_tab_whatever_shift_the_terminal_reports() {
+    // crossterm reports Shift+Tab as BackTab with SHIFT; BackTab already says it.
+    assert_eq!(shift(KeyCode::BackTab), key(KeyCode::BackTab));
+    let mut map = Keymap::empty();
+    map.bind(key(KeyCode::BackTab), Action::CyclePrev);
+    assert_eq!(map.action(shift(KeyCode::BackTab)), Some(Action::CyclePrev));
+    assert_eq!(
+        KeyInput::new(KeyCode::BackTab, Modifiers::SHIFT | Modifiers::ALT).mods,
+        Modifiers::ALT
+    );
+}
+
+#[test]
 fn binding_a_key_replaces_its_action_and_keeps_its_place() {
     let mut map = Keymap::default();
     let before: Vec<KeyInput> = map.bindings().iter().map(|&(k, _)| k).collect();

@@ -108,6 +108,14 @@ pub trait Surface {
     /// Width and height in cells.
     fn size(&self) -> (u16, u16);
 
+    /// Where the surface's top-left cell sits on the host's screen: `(0, 0)` unless it is a
+    /// region of a larger surface, as a widget's area is. A view drawn on it reads the pointer
+    /// in screen cells and subtracts this (plan §10.1), so a host passes its terminal's
+    /// coordinates through unchanged.
+    fn origin(&self) -> (u16, u16) {
+        (0, 0)
+    }
+
     /// Writes one cell. `symbol` is one terminal cell's content: a glyph of display width 1 or 2
     /// plus any zero-width characters after it, as [`text_cells`] splits text (plan §7.1). Only
     /// its first cell is written; a symbol with none (empty, or only zero-width or control

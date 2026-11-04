@@ -73,8 +73,13 @@ impl<K: Key> GraphView<K> {
             }
             return;
         }
+        self.hover(Some((x, y)), out);
+    }
+
+    /// The pointer is over cell `at`, or off the surface: hovers what it points at.
+    pub(super) fn hover(&mut self, at: Option<(u16, u16)>, out: &mut Vec<Outcome>) {
         self.refresh();
-        let hit = self.drawing.hits.hit(&self.drawing.scene, (x, y));
+        let hit = at.and_then(|at| self.drawing.hits.hit(&self.drawing.scene, at));
         let (node, edges): (Option<NodeIx>, &[EdgeIx]) = match hit {
             Some(Hit::Node(ix)) => (Some(ix), &[]),
             Some(Hit::Edges(edges)) => (None, edges),

@@ -248,6 +248,7 @@ impl<K: Key> GraphView<K> {
     pub fn render<S: Surface + ?Sized>(&mut self, surface: &mut S) {
         let (cols, rows) = surface.size();
         self.resize(cols, rows);
+        self.controller.origin = surface.origin();
         self.refresh();
         let Drawing {
             scene, compositor, ..

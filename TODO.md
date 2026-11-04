@@ -64,6 +64,12 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
 
 ## Decisions
 
+- **M3: pointer events arrive in screen cells, and the surface says where it is.** Plan §13
+  passes `from_crossterm`'s event straight to `gv.handle`, in terminal cells, while the widget
+  draws in an area of the terminal. The widget's state is the `GraphView` itself, so the view
+  must know the offset: `Surface::origin`, a provided method returning `(0, 0)`, which the
+  `Buffer` adapter answers with its area's corner and `render` records. A host drawing a
+  `CellGrid` passes surface cells as before. Unratified.
 - **M3: anchor compensation never keeps a node the commit repinned.** Plan §6 keeps the focused
   node where it was drawn through a re-snap or refit. When the commit moved that node's pin,
   the move is the edit: keeping it would pan every other node by the move instead, which is
@@ -915,6 +921,15 @@ own `verify:` under `## Later milestones`.
   dropped, one-ended hover-lift, a keyboard pin at the layout position, a hover move that
   invalidates). verify: `cargo test -p catena --lib -- interact:: view::tests::repinning &&
   cargo test -p catena --test catena -- hover_lift pointer_moving quiescent`
+- [x] **Step 4a: the pointer in screen cells** — `Surface::origin` (provided, `(0, 0)`) says
+  where a surface sits on the host's screen; `render` records it and `handle` subtracts it, so
+  a widget in an area of the terminal takes the terminal's coordinates unchanged, as plan §13's
+  loop passes them. Off the surface a press or scroll is ignored and a move hovers nothing; a
+  drag past its edge holds at the edge. `KeyInput::new` drops Shift from `BackTab`, which
+  crossterm reports with it. The crate root re-exports `Blitter`, `Outcome` and `Redraw`, as
+  plan §13's imports have them. Seen failing with drag moves sent through the hover path, and
+  with Shift kept on `BackTab`. verify: `cargo test -p catena --lib -- interact::pointer::tests::on_a_region
+  interact::pointer::tests::a_drag_past back_tab`
 
 ## Course correction (owner rulings A1–A4)
 

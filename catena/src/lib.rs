@@ -17,6 +17,8 @@ mod view;
 
 pub use geometry::Fit;
 pub use graph::{EdgeSpec, GraphError, NodeSpec};
+pub use interact::{Outcome, Redraw};
 pub use layout::LayoutKind;
 pub use layout::force::{ForceParams, Repulsion};
+pub use raster::Blitter;
 pub use view::{DEFAULT_CELL_ASPECT, DEFAULT_MAX_LABEL_COLS, GraphView, GraphViewBuilder};

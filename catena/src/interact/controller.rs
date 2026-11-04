@@ -84,6 +84,10 @@ pub(crate) struct Controller {
     zoom: Option<ZoomGlide>,
     bundling: bool,
     occlusions: Vec<CellBox>,
+    /// Where the last frame's surface sat on the host's screen ([`Surface::origin`]).
+    ///
+    /// [`Surface::origin`]: crate::raster::Surface::origin
+    pub(crate) origin: (u16, u16),
 }
 
 impl Default for Controller {
@@ -99,6 +103,7 @@ impl Default for Controller {
             zoom: None,
             bundling: true,
             occlusions: Vec::new(),
+            origin: (0, 0),
         }
     }
 }
@@ -141,8 +146,12 @@ impl Controller {
 
 impl<K: Key> GraphView<K> {
     /// Acts on one input event (plan §10.1): a key through the key table, the pointer's
-    /// presses, moves and releases, a scroll, a resize. Coordinates are cells of the surface
-    /// the view draws on. Returns what changed, in order.
+    /// presses, moves and releases, a scroll, a resize. Pointer positions are screen cells:
+    /// the last frame's surface origin ([`Surface::origin`]) is subtracted, a press or scroll
+    /// off the surface is ignored, the pointer leaving it hovers nothing, and a drag past its
+    /// edge holds at the edge. Returns what changed, in order.
+    ///
+    /// [`Surface::origin`]: crate::raster::Surface::origin
     pub fn handle(&mut self, event: super::InputEvent) -> Vec<Outcome> {
         use super::{Button, InputEvent};
         let mut out = Vec::new();
@@ -152,12 +161,29 @@ impl<K: Key> GraphView<K> {
                     self.apply(action, &mut out);
                 }
             }
-            InputEvent::MouseDown(x, y, Button::Left) => self.press(x, y, &mut out),
-            InputEvent::MouseUp(x, y, Button::Left) => self.release(x, y, &mut out),
-            InputEvent::MouseMove(x, y) => self.point(x, y, &mut out),
+            InputEvent::MouseDown(x, y, Button::Left) => {
+                if let Some((x, y)) = self.local(x, y) {
+                    self.press(x, y, &mut out);
+                }
+            }
+            InputEvent::MouseUp(x, y, Button::Left) => {
+                let (x, y) = self.clamped(x, y);
+                self.release(x, y, &mut out);
+            }
+            InputEvent::MouseMove(x, y) => {
+                if self.controller.drag.is_some() {
+                    let (x, y) = self.clamped(x, y);
+                    self.point(x, y, &mut out);
+                } else {
+                    let at = self.local(x, y);
+                    self.hover(at, &mut out);
+                }
+            }
             InputEvent::Scroll(notches, x, y) => {
-                let about = SubPt::new(f64::from(x), f64::from(y));
-                self.zoom_by(f64::from(notches) * SCROLL_ZOOM_STEP, about, &mut out);
+                if let Some((x, y)) = self.local(x, y) {
+                    let about = SubPt::new(f64::from(x), f64::from(y));
+                    self.zoom_by(f64::from(notches) * SCROLL_ZOOM_STEP, about, &mut out);
+                }
             }
             InputEvent::Resize(cols, rows) => {
                 let before = self.viewport.grid();
@@ -311,6 +337,24 @@ impl<K: Key> GraphView<K> {
             about,
         });
         out.push(Outcome::ViewChanged);
+    }
+
+    /// The surface cell under screen cell `(x, y)`; `None` off the surface.
+    fn local(&self, x: u16, y: u16) -> Option<(u16, u16)> {
+        let (ox, oy) = self.controller.origin;
+        let grid = self.viewport.grid();
+        let (x, y) = (x.checked_sub(ox)?, y.checked_sub(oy)?);
+        (x < grid.cols && y < grid.rows).then_some((x, y))
+    }
+
+    /// The surface cell nearest screen cell `(x, y)`.
+    fn clamped(&self, x: u16, y: u16) -> (u16, u16) {
+        let (ox, oy) = self.controller.origin;
+        let grid = self.viewport.grid();
+        (
+            x.saturating_sub(ox).min(grid.cols.saturating_sub(1)),
+            y.saturating_sub(oy).min(grid.rows.saturating_sub(1)),
+        )
     }
 
     /// The middle of what the host's windows leave visible of the view.

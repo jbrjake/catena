@@ -72,11 +72,12 @@ pub struct KeyInput {
 
 impl KeyInput {
     /// `code` held with `mods`. A character key drops Shift: the character's case already
-    /// carries it, and terminals disagree on whether they report Shift with `N`.
+    /// carries it, and terminals disagree on whether they report Shift with `N`. `BackTab`
+    /// drops it too, being Shift+Tab already, which crossterm reports with Shift.
     #[must_use]
     pub const fn new(code: KeyCode, mods: Modifiers) -> Self {
         let mods = match code {
-            KeyCode::Char(_) => mods.without(Modifiers::SHIFT),
+            KeyCode::Char(_) | KeyCode::BackTab => mods.without(Modifiers::SHIFT),
             _ => mods,
         };
         KeyInput { code, mods }
