@@ -68,6 +68,28 @@ fn a_pointer_moving_within_one_target_allocates_nothing() {
 }
 
 #[test]
+fn a_resize_to_the_largest_size_holds_its_memory_to_what_can_be_drawn() {
+    // A resize event can name any u16 size; fuzz_events found 65535 × 65535 driving a
+    // hit-test's index to 800 MB. Nothing past `MAX_CELLS` (4 Mi cells) is drawn, so what the
+    // view keeps for a frame stays within a small multiple of it.
+    let mut gv = generated(5, 40)
+        .view(GraphView::builder())
+        .expect("fixtures are consistent");
+    let info = allocation_counter::measure(|| {
+        gv.handle(InputEvent::Resize(u16::MAX, u16::MAX));
+        gv.handle(InputEvent::MouseMove(10, 10));
+        gv.act(catena::interact::Action::CycleNext);
+        gv.tick(Duration::from_millis(16));
+    });
+    let ceiling = 64 << 20;
+    assert!(
+        info.bytes_max < ceiling,
+        "peak {} MiB",
+        info.bytes_max >> 20
+    );
+}
+
+#[test]
 fn a_frame_after_an_edit_draws_the_edit() {
     // The kept scene must not outlive what it shows: an edit, a pan or a new size redraws.
     let mut gv = generated(2, 30)

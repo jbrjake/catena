@@ -101,6 +101,51 @@ fn a_tie_goes_to_the_earlier_node() {
     assert_eq!(nav((10, 10), Dir::Up, &[(8, 9), (12, 9)]), Some(0));
 }
 
+/// The seed's way, fixed: the mean of every free cell, counted one by one.
+fn brute_center((width, height): (u16, u16), occlusions: &[CellBox]) -> SubPt {
+    let (mut sx, mut sy, mut free) = (0.0f64, 0.0f64, 0u32);
+    for y in 0..height {
+        for x in 0..width {
+            let at = CellPt::new(i32::from(x), i32::from(y));
+            if !occlusions.iter().any(|o| o.contains(at)) {
+                sx += f64::from(x);
+                sy += f64::from(y);
+                free += 1;
+            }
+        }
+    }
+    if free == 0 {
+        return visible_center((width, height), &[]);
+    }
+    SubPt::new(sx / f64::from(free), sy / f64::from(free))
+}
+
+proptest::proptest! {
+    #[test]
+    fn the_visible_center_is_the_mean_of_the_free_cells(
+        (width, height) in (0u16..60, 0u16..30),
+        windows in proptest::collection::vec((-10i32..70, -10i32..40, 0u32..40, 0u32..25), 0..5),
+    ) {
+        let occlusions: Vec<CellBox> =
+            windows.iter().map(|&(x, y, w, h)| CellBox::new(x, y, w, h)).collect();
+        let fast = visible_center((width, height), &occlusions);
+        let slow = brute_center((width, height), &occlusions);
+        proptest::prop_assert!(
+            (fast.x - slow.x).abs() < 1e-9 && (fast.y - slow.y).abs() < 1e-9,
+            "{:?} against {:?}", fast, slow
+        );
+    }
+}
+
+#[test]
+fn the_visible_center_of_the_largest_frame_takes_no_pass_over_its_cells() {
+    // 65535 × 65535 cells is 4.3 billion: a pass over them hung `n` once a host had set its
+    // windows. The left half occluded leaves columns 32767 to 65534, rows 0 to 65534.
+    let left = CellBox::new(0, 0, 32_767, u32::from(u16::MAX));
+    let center = visible_center((u16::MAX, u16::MAX), &[left]);
+    assert_eq!(center, SubPt::new(49_150.5, 32_767.0));
+}
+
 #[test]
 fn a_frame_occluded_everywhere_falls_back_to_its_middle() {
     let all = CellBox::new(0, 0, 80, 24);

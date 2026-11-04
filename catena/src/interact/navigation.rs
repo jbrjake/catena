@@ -42,6 +42,15 @@ pub(crate) fn pan_to(anchor: CellPt, center: SubPt) -> Option<(f64, f64)> {
 /// The middle of the part of a `width × height` frame that `occlusions` (windows the host
 /// draws over the view) leave visible: the mean of its free cells. The frame's own middle when
 /// nothing is occluded, or everything is.
+///
+/// Counted without a pass over the cells, which at 65535 × 65535 would be 4.3 billion: the
+/// windows' edges cut the frame into rectangles that are each wholly free or wholly occluded,
+/// and a free rectangle's cells sum in closed form. Every sum stays below 2⁵³, so the mean is
+/// exactly the cell-by-cell one.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "counts and sums stay below 2^53, where an f64 holds an integer exactly"
+)]
 pub(crate) fn visible_center((width, height): (u16, u16), occlusions: &[CellBox]) -> SubPt {
     let whole = SubPt::new(
         (f64::from(width) - 1.0).max(0.0) / 2.0,
@@ -50,21 +59,45 @@ pub(crate) fn visible_center((width, height): (u16, u16), occlusions: &[CellBox]
     if occlusions.is_empty() || width == 0 || height == 0 {
         return whole;
     }
-    let (mut sx, mut sy, mut free) = (0.0f64, 0.0f64, 0u32);
-    for y in 0..height {
-        for x in 0..width {
-            let at = CellPt::new(i32::from(x), i32::from(y));
-            if !occlusions.iter().any(|o| o.contains(at)) {
-                sx += f64::from(x);
-                sy += f64::from(y);
-                free += 1;
+    let (w, h) = (i64::from(width), i64::from(height));
+    // Each window's part on the frame, as half-open spans `[x0, x1) × [y0, y1)`.
+    let parts: Vec<[i64; 4]> = occlusions
+        .iter()
+        .filter_map(|o| {
+            let (x0, y0) = (i64::from(o.x).clamp(0, w), i64::from(o.y).clamp(0, h));
+            let (x1, y1) = (o.right().clamp(0, w), o.bottom().clamp(0, h));
+            (x0 < x1 && y0 < y1).then_some([x0, y0, x1, y1])
+        })
+        .collect();
+    let cuts = |lo: usize, hi: usize, end: i64| {
+        let mut cuts: Vec<i64> = parts.iter().flat_map(|p| [p[lo], p[hi]]).collect();
+        cuts.extend([0, end]);
+        cuts.sort_unstable();
+        cuts.dedup();
+        cuts
+    };
+    let (xs, ys) = (cuts(0, 2, w), cuts(1, 3, h));
+    // The sum of the integers in `[a, b)`, exact: a run of an odd length has an even
+    // first-plus-last.
+    let run = |a: i64, b: i64| (a + b - 1) * (b - a) / 2;
+    let (mut free, mut sx, mut sy) = (0i64, 0i64, 0i64);
+    for y in ys.windows(2) {
+        for x in xs.windows(2) {
+            let covered = parts
+                .iter()
+                .any(|p| p[0] <= x[0] && x[0] < p[2] && p[1] <= y[0] && y[0] < p[3]);
+            if !covered {
+                let (dx, dy) = (x[1] - x[0], y[1] - y[0]);
+                free += dx * dy;
+                sx += dy * run(x[0], x[1]);
+                sy += dx * run(y[0], y[1]);
             }
         }
     }
     if free == 0 {
         return whole;
     }
-    SubPt::new(sx / f64::from(free), sy / f64::from(free))
+    SubPt::new(sx as f64 / free as f64, sy as f64 / free as f64)
 }
 
 /// Half the spatial-navigation cone, as its cosine: ±60° (plan §10.3).

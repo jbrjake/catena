@@ -10,6 +10,7 @@
 //! The seed's `EdgeScreenPos` gives way to the scene's own routes.
 
 use crate::geometry::cell::CellBox;
+use crate::raster::MAX_CELLS;
 
 /// A bucket's width, in columns (the seed's).
 const BUCKET_W: u16 = 16;
@@ -33,6 +34,10 @@ impl SpatialGrid {
         (width, height): (u16, u16),
         items: impl IntoIterator<Item = (u32, CellBox)>,
     ) {
+        // Only what can be drawn is indexed: a frame past `MAX_CELLS` keeps its width and loses
+        // rows, as a `CellGrid` and a canvas do, so a resize to any `u16` size stays bounded.
+        let drawn = MAX_CELLS / usize::from(width.max(1));
+        let height = height.min(u16::try_from(drawn).unwrap_or(u16::MAX));
         self.cols = width.div_ceil(BUCKET_W);
         self.rows = height.div_ceil(BUCKET_H);
         let len = usize::from(self.cols) * usize::from(self.rows);

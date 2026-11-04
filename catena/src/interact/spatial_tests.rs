@@ -82,3 +82,19 @@ fn a_rebuild_forgets_the_last_items_and_keeps_insertion_order() {
     grid.rebuild((0, 0), []);
     assert_eq!(grid.query(0, 0), [] as [u32; 0]);
 }
+
+#[test]
+fn a_frame_past_max_cells_is_indexed_only_as_far_as_it_can_be_drawn() {
+    // A resize event can name any u16 size (found by fuzz_events: 65535 × 65535 cost 33.5
+    // million buckets, 800 MB). Nothing past `MAX_CELLS` is drawn, as a `CellGrid` and a canvas
+    // keep their width and lose rows; the index stops there too.
+    let grid = grid((u16::MAX, u16::MAX), &[(4, CellBox::new(100, 30, 6, 2))]);
+    let cells = usize::from(BUCKET_W) * usize::from(BUCKET_H);
+    assert!(
+        grid.buckets.len() <= crate::raster::MAX_CELLS / cells + usize::from(grid.cols),
+        "{} buckets",
+        grid.buckets.len()
+    );
+    assert_eq!(grid.query(102, 31), [4]);
+    assert_eq!(grid.query(102, u16::MAX - 1), [] as [u32; 0]);
+}
