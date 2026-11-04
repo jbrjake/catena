@@ -15,8 +15,11 @@ workspace = true
 [features]
 # `input::from_crossterm` (plan §10.1).
 crossterm = ["dep:crossterm"]
-# The `catena-demo` bin (plan §19 M3): a crossterm terminal, and the testkit's fixtures.
-demo = ["crossterm", "dep:catena-testkit", "dep:ratatui-crossterm"]
+# The `Minimap` and `Legend` widgets (plan §3).
+widget-extras = []
+# The `catena-demo` bin (plan §19 M3): a crossterm terminal, the testkit's fixtures, and the
+# extras it shows.
+demo = ["crossterm", "widget-extras", "dep:catena-testkit", "dep:ratatui-crossterm"]
 
 [dependencies]
 catena.workspace = true

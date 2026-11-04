@@ -26,6 +26,14 @@
 // workspace without features (`scripts/regression.sh`) and `crossterm` is a dev-dependency.
 #[cfg(any(feature = "crossterm", test))]
 pub mod input;
+#[cfg(any(feature = "widget-extras", test))]
+mod legend;
+#[cfg(any(feature = "widget-extras", test))]
+mod minimap;
 mod widget;
 
+#[cfg(any(feature = "widget-extras", test))]
+pub use legend::Legend;
+#[cfg(any(feature = "widget-extras", test))]
+pub use minimap::Minimap;
 pub use widget::{BufferSurface, Graph};

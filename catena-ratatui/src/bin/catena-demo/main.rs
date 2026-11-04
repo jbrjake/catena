@@ -12,10 +12,12 @@ use std::collections::BTreeMap;
 use std::io;
 use std::time::{Duration, Instant}; // lint-allow: time — a host's loop owns the clock, and this bin is a host (plan §10.4)
 
+use catena::geometry::cell::CellBox;
 use catena::interact::Dir;
+use catena::raster::PaletteColor;
 use catena::{Blitter, GraphView, Outcome, Redraw};
-use catena_ratatui::Graph;
 use catena_ratatui::input::from_crossterm;
+use catena_ratatui::{Graph, Legend, Minimap};
 use catena_testkit::fixtures::{FixtureGraph, community, generated};
 use crossterm::event::{
     self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
@@ -230,9 +232,29 @@ impl App {
         let area = frame.area();
         let rows = area.height.saturating_sub(1);
         let graph = Rect::new(area.x, area.y, area.width, rows);
+        let extras = overlays(graph);
+        let occluded: Vec<CellBox> = extras
+            .iter()
+            .flatten()
+            .map(|r| {
+                let at = |v: u16, from: u16| i32::from(v - from);
+                CellBox::new(
+                    at(r.x, graph.x),
+                    at(r.y, graph.y),
+                    u32::from(r.width),
+                    u32::from(r.height),
+                )
+            })
+            .collect();
+        self.shown().view.set_occlusions(&occluded);
         frame.render_stateful_widget(Graph::new(), graph, &mut self.shown().view);
         let plain = self.plain;
         let shown = &self.graphs[self.current];
+        if let Some([legend, minimap]) = extras {
+            let swatch = if plain { '#' } else { '■' };
+            frame.render_widget(Legend::new(&LEGEND).swatch(swatch), legend);
+            frame.render_widget(Minimap::new(&shown.view), minimap);
+        }
         let bundling = if shown.view.bundling() {
             ""
         } else {
@@ -248,6 +270,28 @@ impl App {
             buf.set_stringn(area.x, area.y + rows, line, usize::from(area.width), style);
         }
     }
+}
+
+/// The legend of the drawing's placeholder styles (until plan §12's themes name their own).
+const LEGEND: [(&str, PaletteColor); 4] = [
+    ("node", PaletteColor::Ansi(7)),
+    ("edge", PaletteColor::Ansi(8)),
+    ("hover-lifted edge", PaletteColor::Ansi(15)),
+    ("minimap: in view", PaletteColor::Ansi(14)),
+];
+
+/// Where the legend (top right) and the minimap (bottom right) float over a graph drawn in
+/// `graph`, when it has room for them beside a graph worth seeing.
+fn overlays(graph: Rect) -> Option<[Rect; 2]> {
+    let (width, legend_rows, minimap_rows) = (24, 4, 9);
+    if graph.width < 3 * width || graph.height < 2 * (legend_rows + minimap_rows) {
+        return None;
+    }
+    let x = graph.right() - width - 1;
+    Some([
+        Rect::new(x, graph.y + 1, width, legend_rows),
+        Rect::new(x, graph.bottom() - minimap_rows - 1, width, minimap_rows),
+    ])
 }
 
 /// `NO_COLOR`: every cell of `area` in the terminal's own colors, its attributes kept.

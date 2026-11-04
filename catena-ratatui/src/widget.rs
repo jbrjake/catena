@@ -172,6 +172,17 @@ impl BufferSurface<'_> {
     }
 }
 
+/// Resets every cell of `area` inside `buf`: what a widget drawn over another clears first.
+#[cfg(any(feature = "widget-extras", test))]
+pub(crate) fn clear(buf: &mut Buffer, area: Rect) {
+    let area = area.intersection(buf.area);
+    for y in area.top()..area.bottom() {
+        for x in area.left()..area.right() {
+            buf[(x, y)].reset();
+        }
+    }
+}
+
 /// A catena color as ratatui's: the 16 ANSI colors by ratatui's names (the low four bits, as
 /// catena reads them), the rest as they are.
 pub(crate) fn color(color: PaletteColor) -> Color {

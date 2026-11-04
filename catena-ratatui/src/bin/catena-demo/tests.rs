@@ -96,6 +96,47 @@ fn the_status_line_names_what_happened() {
 }
 
 #[test]
+fn the_extras_float_at_the_right_and_centering_keeps_clear_of_them() {
+    // Plan §6's occlusion-aware centering, fed the overlays the demo draws.
+    let mut app = App::new(false);
+    let buf = frame(&mut app);
+    let [legend, _] = overlays(Rect::new(0, 0, 100, 29)).expect("room at 100 × 30");
+    let text: String = (legend.x..legend.right())
+        .map(|x| buf[(x, legend.y + 2)].symbol().to_string())
+        .collect();
+    assert!(text.contains("hover-lifted edge"), "{text:?}");
+    // The graph's 100 × 29 cells less the overlays' 24 columns from 75 on rows 1–4 and 19–27:
+    // 2588 free cells, whose columns sum to 116 562, so the visible center is column 45.04,
+    // four and a half left of the frame's 49.5. Cycling glides each node there, unless it was
+    // within three cells already.
+    let center = 116_562.0 / 2588.0;
+    let mut glided = 0;
+    for _ in 0..5 {
+        app.event(&key('n'));
+        settle(&mut app);
+        frame(&mut app);
+        let view = &app.graphs[app.current].view;
+        let selected = view.selected().expect("selected");
+        let drawn = view
+            .scene()
+            .items()
+            .iter()
+            .find_map(|item| match item.payload {
+                catena::scene::Payload::NodeBox { ix } if ix == selected => Some(item.bounds),
+                _ => None,
+            })
+            .expect("drawn");
+        let middle = f64::from(drawn.x) + f64::from(drawn.width) / 2.0;
+        assert!(
+            (middle - center).abs() < 3.5,
+            "{drawn:?} is centered on {center}"
+        );
+        glided += usize::from((middle - center).abs() <= 1.0);
+    }
+    assert!(glided > 0, "a glide landed on the visible center");
+}
+
+#[test]
 fn tab_switches_graphs_and_q_quits() {
     let mut app = App::new(false);
     let first = frame(&mut app);

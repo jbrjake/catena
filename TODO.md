@@ -5,8 +5,8 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**M3 (interaction + widget + demo, plan §19) is under way: steps 1 to 5 have landed, and
-step 6, the minimap and legend, is next.** A view lays out, snaps and draws; T3 and T4 hold its frames
+**M3 (interaction + widget + demo, plan §19) is under way: steps 1 to 6 have landed, and
+step 7, the fuzz crate, is next.** A view lays out, snaps and draws; T3 and T4 hold its frames
 to committed hashes on every platform; a steady frame allocates nothing; the benches sit
 inside every §15.1 budget. It takes input: `GraphView::{handle, act, tick}` select, hover
 with A4's hover-lift, pin, drag, cycle, navigate, pan and zoom, with time entering only
@@ -22,7 +22,7 @@ M3 in this order, each step green on its own:
 3. ~~The `Controller`~~ (plan §10.1, §10.3, §10.4): landed (`## M3`, steps 3a to 3c).
 4. ~~The widget crate~~: landed (`## M3`, steps 4a and 4b).
 5. ~~`catena-demo` behind `demo`~~: landed (`## M3`, step 5).
-6. Minimap and legend behind `widget-extras` (`seed/ui/vector_minimap.rs` read, then deleted).
+6. ~~Minimap and legend behind `widget-extras`~~: landed (`## M3`, step 6).
 7. The `fuzz/` crate with `fuzz_events` and `fuzz_topology`, and the nightly `fuzz` CI job.
 
 Carried from M2: invariant F is measured on world positions at the later layout's
@@ -61,6 +61,13 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
 
 ## Decisions
 
+- **M3: the minimap reads the view; it is not a second render of it.** Plan §18 has "a second
+  `GraphView` render at a fixed low zoom", but rendering the view at the minimap's size would
+  resize and relayout it, and a second `GraphView` would lay out a graph of its own. So
+  `render_overview(&self)` draws the view's own world positions, one dot a node as the seed's
+  minimap did, with no edges and no collision re-spacing, so a crowded minimap stays a picture
+  of the layout. It fits the nodes together with the view's frame, unlike the seed, whose
+  rectangle left the minimap whenever the view showed more than the nodes' bounding box.
 - **M3: the demo runs on `ratatui-crossterm`, not all of `ratatui`.** Plan §3's `demo` is
   "`crossterm` + optional full `ratatui`"; the demo needs only a crossterm `Backend` for
   `ratatui-core`'s `Terminal`, which `ratatui-crossterm` 0.1 is, over the same crossterm 0.29.
@@ -975,6 +982,23 @@ own `verify:` under `## Later milestones`.
   verify: `cargo test -p catena-ratatui --features demo --bin catena-demo && cargo test -p
   catena --lib -- ascii_glyphs && cargo build -p catena-ratatui --features demo --bin
   catena-demo`
+- [x] **Step 6: the minimap and legend** (plan §3, §18) — `seed/ui/vector_minimap.rs` read,
+  then deleted. `GraphView::render_overview(&self, surface)` draws the whole graph small from
+  the layout, changing nothing in the view: a sub-cell dot a node (cells shared, no re-spacing),
+  the selected node's cell filled and reversed, and under them the rectangle of what the view
+  shows, in a placeholder bright cyan; nodes and rectangle are fitted together, aspect-correct,
+  in a one-cell margin, so the rectangle is always in sight. `catena-ratatui`'s `widget-extras`
+  adds `Minimap` (a `Widget` over `&GraphView`) and `Legend` (host rows of a swatch and a label,
+  cut at the edge, never through a wide glyph), each clearing its area to float over the graph;
+  `demo` implies it and shows both at the right, passing them to `set_occlusions`. Tests: the
+  dots at cells worked by hand from both fits (seen failing with the fit stretched per axis);
+  the rectangle frames every dot, shrinks under a zoom and follows a pan; the widgets draw the
+  core's overview at an offset and clear what was under them (seen failing without the clear);
+  a legend's swatch takes its color (seen failing without); T5's graph, minimap and legend in
+  one layout; and the demo centers on the visible center its overlays leave, column 45.04 of
+  100, not 49.5 (seen failing with the occlusions dropped). verify: `cargo test -p catena --lib
+  -- overview && cargo test -p catena-ratatui --features demo && test ! -e
+  seed/ui/vector_minimap.rs`
 
 ## Course correction (owner rulings A1–A4)
 
@@ -1116,6 +1140,12 @@ Each `verify:` lists the named tests first, because a test filter that matches n
   outcome. When the radial layout's bundling lands (plan §9.3, §19 M5), β is 0 while it is
   off, the toggle invalidates the drawing and reports `ViewChanged`, and a T2 golden shows both.
   verify: `cargo test -p catena -- bundling_toggle_unbundles`
+- [ ] **A click on the minimap moves the view there** — the seed dragged its minimap's
+  rectangle (plan §10.1's note); `render_overview` only draws. Give the core the overview's
+  inverse (`GraphView::overview_world_at(size, cell)`) and a glide that centers a world point,
+  and have the `Minimap` widget's host route a press in its area there; the plan names no
+  interaction for the minimap, so the binding is the owner's to confirm. verify: `cargo test
+  -p catena --lib -- overview::tests::a_click`
 
 ## Later milestones
 
