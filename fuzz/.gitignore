@@ -1,0 +1,4 @@
+target
+coverage
+# Crash inputs are triaged, then kept as regression tests or seeds, never committed raw.
+artifacts

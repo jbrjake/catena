@@ -1,0 +1,46 @@
+# The fuzz job (plan §16.7, §17): each cargo-fuzz target for five minutes a night, ten in all,
+# from the committed corpus. libFuzzer is Linux and nightly only; Windows and macOS are covered
+# by T1–T5 in `ci.yml`. Every `uses:` is pinned by full commit SHA; the comment names the
+# release. A crash prints its input (and its Base64) in the log; reproduce it with
+# `cargo +nightly fuzz run <target> <file>`.
+name: fuzz
+
+on:
+  schedule:
+    - cron: "41 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: fuzz (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [fuzz_events, fuzz_topology]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: fuzz
+      - uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
+        with:
+          tool: cargo-fuzz
+      # Inputs grow to 4 KiB at once (`-len_control=0`), so event streams run long. A small
+      # AddressSanitizer quarantine keeps the RSS limit about catena's memory, not freed memory
+      # the sanitizer holds back (256 MiB by default).
+      - name: five minutes of ${{ matrix.target }}
+        shell: bash
+        working-directory: fuzz
+        env:
+          ASAN_OPTIONS: quarantine_size_mb=16
+        run: >-
+          cargo +nightly fuzz run ${{ matrix.target }} --
+          -max_total_time=300 -max_len=4096 -len_control=0 -rss_limit_mb=512

@@ -1,0 +1,34 @@
+[package]
+name = "catena-fuzz"
+version = "0.0.0"
+description = "cargo-fuzz targets for catena (plan §16.7); unpublished, outside the workspace"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+# Its own workspace: the root excludes `fuzz/`, and cargo-fuzz builds it with nightly flags
+# that must not reach the published crates.
+[workspace]
+
+[dependencies]
+# Unpublished, so pinned exactly, as `xtask` is.
+arbitrary = { version = "=1.4.2", features = ["derive"] }
+catena = { path = "../catena" }
+catena-testkit = { path = "../catena-testkit" }
+libfuzzer-sys = "=0.4.10"
+
+[[bin]]
+name = "fuzz_events"
+path = "fuzz_targets/fuzz_events.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_topology"
+path = "fuzz_targets/fuzz_topology.rs"
+test = false
+doc = false
+bench = false

@@ -1,5 +1,5 @@
 # CI (plan §17). Every `uses:` is pinned by full commit SHA; the comment names the release.
-# Later milestones add fuzz (M3) and pty (M5).
+# The fuzz job runs nightly from `fuzz.yml`; the pty tier (M5) is still to come.
 name: ci
 
 on:

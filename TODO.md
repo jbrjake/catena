@@ -5,57 +5,32 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**M3 (interaction + widget + demo, plan §19) is under way: steps 1 to 6 have landed, and
-step 7, the fuzz crate, is next.** A view lays out, snaps and draws; T3 and T4 hold its frames
-to committed hashes on every platform; a steady frame allocates nothing; the benches sit
-inside every §15.1 budget. It takes input: `GraphView::{handle, act, tick}` select, hover
-with A4's hover-lift, pin, drag, cycle, navigate, pan and zoom, with time entering only
-through `tick`. `catena-ratatui` draws it as a `Graph` widget and converts crossterm events,
-so plan §13's host loop runs as written, and `catena-demo` (`cargo run -p catena-ratatui
---features demo --bin catena-demo`) shows it. The joined-islands pull the owner ruled for has
-landed switched off, waiting on the owner's call about its cost to invariant F (`## Owner`).
+**M3 is closed; M4 (the layered engine, plan §19) is next.** A view lays out (force), snaps,
+draws, and takes input through `GraphView::{handle, act, tick}`; `catena-ratatui` draws it as
+a `Graph` widget with a `Minimap` and `Legend`, converts crossterm events, and runs
+`catena-demo` (`cargo run -p catena-ratatui --features demo --bin catena-demo`); two
+cargo-fuzz targets run nightly (`fuzz.yml`). M3's seven steps are `## M3`'s items. The
+joined-islands pull the owner ruled for has landed switched off, waiting on the owner's call
+about its cost to invariant F (`## Owner`).
 
-M3 in this order, each step green on its own:
+M4 in this order, each step green on its own, porting `seed/ui/dag_layout/` selectively (plan
+§18's row: keep the `JunctionKind` table, the flex Y bands, `DagBuilder` and the golden style;
+replace ordering, positioning and routing per §9.1):
 
-1. ~~The input model~~ (plan §10.1): landed (`## M3`, step 1).
-2. ~~Hit-testing~~ (plan §10.2): landed (`## M3`, step 2).
-3. ~~The `Controller`~~ (plan §10.1, §10.3, §10.4): landed (`## M3`, steps 3a to 3c).
-4. ~~The widget crate~~: landed (`## M3`, steps 4a and 4b).
-5. ~~`catena-demo` behind `demo`~~: landed (`## M3`, step 5).
-6. ~~Minimap and legend behind `widget-extras`~~: landed (`## M3`, step 6).
-7. The `fuzz/` crate with `fuzz_events` and `fuzz_topology`, and the nightly `fuzz` CI job.
+1. Cycle removal (greedy Eades–Lin–Smyth, reversals restored at emission) and layering
+   (longest path, pull-up tightening, `LayeredSpec` rank pins) in `catena/src/layout/layered/`.
+2. Dummy chains carrying their `EdgeIx`, crossing minimization and coordinate assignment
+   (§9.1), with invariant H's phase checks.
+3. Channel routing (a channel row per merge or fork group), junction glyphs and arrowheads.
+4. The tree engine (spanning-forest guard, `TreeSpec`).
+5. The 12-fixture DAG golden set (skip-edge and channel-stacking fixtures among them),
+   edge conservation at 512 cases, and fuzz target 3, `fuzz_layout_input`.
 
-Carried from M2: invariant F is measured on world positions at the later layout's
-`Fit::Contain` scale; with drawing live, read it again on drawn cells, since a refit after a
-node lands outside the old bounding box moves every cell (anchor compensation holds only the
-selected node). The owner ruled on M2's open choices (`owner-rulings.md`,
+Carried, each an item below: invariant F read again on drawn cells (`## Found while porting`),
+and the owner's open questions (`## Owner`): the joined-islands pull, fitting islands to the
+frame, crate-name reservation. The owner ruled on M2's other choices (`owner-rulings.md`,
 "Relayout follow-ups"): F stays pooled with no per-run floor, joined islands must pull
-together, and the rest stands except fitting islands to the frame, still the owner's question.
-
-M2 as it landed, each step green on its own:
-
-1. ~~The graph store~~ (plan §4): landed.
-2. ~~`ResolvedMetrics`~~ (plan §5): landed. `GraphView::pending` now holds every commit's
-   `Delta` with `reshaped` cut to the nodes whose measured box changed; `repinned` lists pin
-   edits, which re-snap with an unchanged box. Steps 3 and 4 consume it; nothing clears it yet.
-   No `Payload::Label`: a node's text is part of its `NodeBox` form (see the decision), so
-   §7.4's `Label{..}` waits for free-standing text, if any.
-3. ~~The force layout~~ (plan §8), with ~~the relayout rework~~: landed as
-   `layout::force::engine::lay_out(params, store, metrics, Frame { area, cell_aspect }, change,
-   &mut ForceState)`, world positions (node centers) by slot. Nothing calls it outside tests
-   yet, so its modules carry `expect(dead_code)`.
-4. ~~`GridSnapper` and the viewport~~ (plan §6): landed as `geometry::snap` (`fit`,
-   `resolve`, `derive`, `placement_order`) and `geometry::viewport` (the canonical/derived
-   split, zoom-out re-snap, anchor compensation), and `GraphView` lays out and snaps at the end
-   of every `update`. `simulation::Run` takes one step at a time, which is what
-   `LayoutPacing::Animated` needs once `tick` exists.
-5. ~~Layout → `SceneGraph` → `render_to_string`; T3 scene snapshots; the T4 tier; invariants
-   B–E and N on real scenes~~: landed (`## M2`, steps 5a to 5d) as `draw::build`,
-   `GraphView::{scene, render, render_to_string}`, `catena/tests/visual/`, the
-   `catena-render-hash` bin with `catena-testkit/tests/hashes/`, and the invariant tests.
-6. ~~The zero-allocation frame test, the first criterion benches, `scripts/check-perf.sh`
-   with `bench-baseline.json`, and the `coverage` and `bench` CI jobs~~: landed (`## M2`, steps
-   6a to 6d).
+together.
 
 The owner's crates.io name reservation is still recommended (plan §0); it blocks nothing.
 
@@ -999,6 +974,36 @@ own `verify:` under `## Later milestones`.
   100, not 49.5 (seen failing with the occlusions dropped). verify: `cargo test -p catena --lib
   -- overview && cargo test -p catena-ratatui --features demo && test ! -e
   seed/ui/vector_minimap.rs`
+- [x] **Step 7: the fuzz crate and the nightly job** (plan §16.7) — `fuzz/`, its own workspace
+  outside the root's, defines `Arbitrary` mirrors of the inputs (an event enum over every
+  default key, every action, ticks, renders, and the pointer anywhere a `u16` reaches; a
+  mutation enum over adds, removals, labels, NaN-capable pins and weights, and stale edge
+  ids), so catena carries no `arbitrary` dependency. `fuzz_events` drives a clone of
+  `generated(5, 40)`; `fuzz_topology` interleaves transactions with input, checking after
+  every commit that each live key's index maps back to it, that no other index is live, and
+  that committed edges are live exactly until removed, with live ends. Both check invariants
+  A, B and C on the last frame (I, the snap round trip, is not observable through the public
+  API; the core's property test holds it). `.github/workflows/fuzz.yml` runs each for five
+  minutes a night from the committed, minimized corpus, with a 16 MiB AddressSanitizer
+  quarantine, since the default 256 MiB counted against the RSS limit as if it were catena's.
+  The fuzzer found two defects, each fixed red first (below). verify: `cd fuzz && cargo
+  +nightly fuzz run fuzz_events -- -runs=10000 && cargo +nightly fuzz run fuzz_topology --
+  -runs=10000`
+- [x] **Fuzz finding: a resize to any `u16` size grew the hit index without bound** —
+  `Resize(65535, 65535)` and then any hit-test built 33.5 million buckets, 803 MiB. The index
+  now stops where drawing does (`MAX_CELLS`, width kept, rows lost, as `CellGrid` and the
+  canvas do), and `visible_center`, which made one pass over all 4.3 billion cells of such a
+  frame per keyboard centering, sums the free region in closed form over the windows' edges
+  (checked against the cell-by-cell mean on random frames). Seen failing: 803 MiB peak, a
+  33,554,432-bucket grid, and a centering killed at 30 s. verify: `cargo test -p catena --
+  a_resize_to_the_largest a_frame_past_max_cells the_visible_center`
+- [x] **Fuzz finding: a pan while zoomed out drew two boxes in one cell** — below the snap's
+  zoom, nodes a cell apart are drawn 0.98 cells apart before rounding, and the pan glide's
+  fraction rounded two into one cell (a zoom-out glide ended at 0.1 against a snap at 0.1017,
+  then `N`'s centering glide panned). `pan_by` now re-snaps what meets when below the snap's
+  zoom, as a zoom out does; re-snapping on every zoom-out step instead would round the snap at
+  each and bring back ledger row 32's drift. The crash input is a seed of the corpus. verify:
+  `cargo test -p catena --lib -- a_pan_while_zoomed_out`
 
 ## Course correction (owner rulings A1–A4)
 
@@ -1140,6 +1145,11 @@ Each `verify:` lists the named tests first, because a test filter that matches n
   outcome. When the radial layout's bundling lands (plan §9.3, §19 M5), β is 0 while it is
   off, the toggle invalidates the drawing and reports `ViewChanged`, and a T2 golden shows both.
   verify: `cargo test -p catena -- bundling_toggle_unbundles`
+- [ ] **Invariant F on drawn cells** (carried from M2) — F is measured on world positions at
+  the later layout's `Fit::Contain` scale. With drawing live, read it on drawn cells too: a
+  refit after a node lands outside the old bounding box moves every cell, and anchor
+  compensation holds only the selected node. Report both readings; the bound is the owner's.
+  verify: `cargo test -p catena -- invariant_f_on_drawn_cells`
 - [ ] **A click on the minimap moves the view there** — the seed dragged its minimap's
   rectangle (plan §10.1's note); `render_overview` only draws. Give the core the overview's
   inverse (`GraphView::overview_world_at(size, cell)`) and a glide that centers a world point,
@@ -1156,8 +1166,10 @@ Each `verify:` lists the named tests first, because a test filter that matches n
   passing tests, the stability suite and the cross-run hash test are green,
   `./scripts/check-perf.sh` exits 0 and wrote this machine's baseline entry, `cargo xtask lint`
   reports zero `lint-allow` lines for the `fmath` rule
-- [ ] **M3 — Interaction + widget + demo** — per plan §19, with A4's unbundle key and hover-lift
-  in the default key table. verify: `cargo test --workspace &&
+- [x] **M3 — Interaction + widget + demo** — per plan §19, with A4's unbundle key and hover-lift
+  in the default key table. Closed on `main` with each part of its `verify:` seen exiting 0:
+  `cargo test --workspace`, the demo built, and `fuzz_events` at 10,000 runs over its corpus
+  (with `fuzz_topology` at 10,000 too). verify: `cargo test --workspace &&
   cargo build -p catena-ratatui --bin catena-demo --features demo && cargo +nightly fuzz run
   fuzz_events -- -runs=10000`
 - [ ] **M4 — Layered engine** — per plan §19 (its two test filters moved after `--`, as M1's
