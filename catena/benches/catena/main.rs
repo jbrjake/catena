@@ -75,7 +75,9 @@ fn warm(c: &mut Criterion) {
         .filter(|e| !(kept(&e.source) && kept(&e.target)))
         .cloned()
         .collect();
-    c.bench_function("layout/warm_5pct_200", |b| {
+    // In a group, so criterion files it as `layout/warm_5pct_200` beside the cold layouts.
+    let mut group = c.benchmark_group("layout");
+    group.bench_function("warm_5pct_200", |b| {
         b.iter_batched(
             || base.clone(),
             |mut gv| {
@@ -94,6 +96,7 @@ fn warm(c: &mut Criterion) {
             BatchSize::LargeInput,
         );
     });
+    group.finish();
 }
 
 /// A property edit (plan §4.2): no layout runs, nothing moves.
@@ -135,9 +138,11 @@ fn update(c: &mut Criterion) {
     let mut gv = view(&graph);
     let key = graph.nodes[0].key.clone();
     let mut step = 0;
-    c.bench_function("update/property_1000", |b| {
+    let mut group = c.benchmark_group("update");
+    group.bench_function("property_1000", |b| {
         b.iter(|| property(&mut gv, &key, &mut step));
     });
+    group.finish();
 }
 
 /// This process's peak resident set in KiB, where the platform says (Linux).

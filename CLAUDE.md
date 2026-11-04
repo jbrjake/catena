@@ -16,8 +16,9 @@ cargo insta review        # accept T2 golden changes
 CATENA_UPDATE_SNAPSHOTS=1 cargo test   # re-baseline T3 hashes (each package's tests/visual/)
 ```
 
-`check-perf.sh` lands at M2, insta with M1's scene step. Gate on the newest stable rustc, the
-one CI's `check` runs (owner ruling); a container's `stable` can lag, so check `rustc -V`.
+`check-perf.sh` runs on demand (`UPDATE_BASELINE=1` reseeds this machine's entry). Gate on the
+newest stable rustc, the one CI's `check` runs (owner ruling); a container's `stable` can lag,
+so check `rustc -V`.
 
 ## Overrides
 

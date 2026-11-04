@@ -44,8 +44,8 @@ M2 in this order, each step green on its own:
    `GraphView::{scene, render, render_to_string}`, `catena/tests/visual/`, the
    `catena-render-hash` bin with `catena-testkit/tests/hashes/`, and the invariant tests.
 6. ~~The zero-allocation frame test~~ (step 6a, `## M2`), ~~the first criterion benches~~
-   (6b), `scripts/check-perf.sh` with `bench-baseline.json`, and the `coverage` and `bench` CI
-   jobs.
+   (6b), ~~`scripts/check-perf.sh` with `bench-baseline.json`~~ (6c), and the `coverage` and
+   `bench` CI jobs.
 
 The owner's crates.io name reservation is still recommended (plan §0); it blocks nothing.
 
@@ -782,6 +782,18 @@ Plan §19, in the six steps of `## Now`, each green on its own. The milestone cl
   rebuilt one does: the compositor dominates, not the scene. Hit-testing (M3) and the layered
   pipeline (M4) join with their code. verify: `cargo bench -p catena --bench catena -- --list
   | grep -c ': benchmark' | grep -qx 8`
+- [x] **Step 6c: the perf ratchet** (plan §15.1) — `scripts/check-perf.sh` runs `cargo xtask
+  perf`: the bench target, then every budgeted bench against its §15.1 budget on any machine,
+  and every bench and the peak RSS against 1.5× of this machine's entry in the committed
+  `bench-baseline.json` (past it, the owner's approval, then `UPDATE_BASELINE=1`). A machine
+  with no entry seeds one loudly; an estimate older than the run is never read, so a bench that
+  did not run fails as "not measured" (seen, when two benches outside groups filed under
+  another directory, which put them in groups). A machine is its host, CPU model, cores and
+  GiB of memory, from `/proc` or `sysctl`. The judgment is I/O-free and unit-tested (seeding,
+  the ratchet, budgets, reseeding one machine, added benches, JSON round trip, malformed
+  baselines); the ratchet and budget tests were seen failing with each bar loosened. This
+  container's entry is seeded, and a second run passed at 1.00–1.06×. verify:
+  `./scripts/check-perf.sh && grep -q '"host": "vm"' bench-baseline.json`
 - [x] **Pull joined islands together** (`owner-rulings.md`, "Relayout follow-ups") — the owner:
   "it's not okay for islands to be stretched, they need to pull together." `layout/force/merge`
   moves each island a change joins, but the largest, as one rigid body (sliding and turning)

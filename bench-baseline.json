@@ -1,0 +1,23 @@
+{
+  "machines": [
+    {
+      "fingerprint": {
+        "cores": 4,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+        "host": "vm",
+        "ram_gib": 16
+      },
+      "medians_ns": {
+        "frame/rebuilt_1000": 7523043.0,
+        "frame/rebuilt_200": 856868.0,
+        "frame/steady_1000": 7375806.0,
+        "frame/steady_200": 840230.0,
+        "layout/cold_1000": 94024178.0,
+        "layout/cold_200": 10196659.0,
+        "layout/warm_5pct_200": 3481865.0,
+        "update/property_1000": 592.0
+      },
+      "peak_rss_kib": 15188
+    }
+  ]
+}
