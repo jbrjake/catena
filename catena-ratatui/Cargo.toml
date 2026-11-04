@@ -15,11 +15,17 @@ workspace = true
 [features]
 # `input::from_crossterm` (plan §10.1).
 crossterm = ["dep:crossterm"]
+# The `catena-demo` bin (plan §19 M3): a crossterm terminal, and the testkit's fixtures.
+demo = ["crossterm", "dep:catena-testkit", "dep:ratatui-crossterm"]
 
 [dependencies]
 catena.workspace = true
+# The demo's fixtures. A version, unlike the dev-dependency's path alone, because a published
+# optional dependency needs one: catena-testkit publishes before this crate.
+catena-testkit = { path = "../catena-testkit", version = "0.1.0", optional = true }
 crossterm = { workspace = true, optional = true }
 ratatui-core.workspace = true
+ratatui-crossterm = { workspace = true, optional = true }
 
 [dev-dependencies]
 catena-testkit.workspace = true
@@ -31,3 +37,8 @@ proptest.workspace = true
 [[test]]
 name = "catena_ratatui"
 path = "tests/catena_ratatui/main.rs"
+
+[[bin]]
+name = "catena-demo"
+path = "src/bin/catena-demo/main.rs"
+required-features = ["demo"]

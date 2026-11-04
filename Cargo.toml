@@ -31,6 +31,9 @@ libm = "0.2"
 # Dev-only. The fork and timeout features would pull rusty-fork and tempfile for nothing.
 proptest = { version = "1.11", default-features = false, features = ["std"] }
 ratatui-core = "0.1"
+# The demo's terminal (`catena-ratatui`'s `demo` feature): ratatui's crossterm backend alone,
+# not all of ratatui, over the same crossterm 0.29; without `underline-color`, unused.
+ratatui-crossterm = { version = "0.1", default-features = false, features = ["crossterm_0_29"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # The T3 snapshot hash (plan §16.4); default features are `alloc` and `oid`, neither needed.

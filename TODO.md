@@ -5,13 +5,14 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**M3 (interaction + widget + demo, plan §19) is under way: steps 1 to 4 have landed, and
-step 5, `catena-demo`, is next.** A view lays out, snaps and draws; T3 and T4 hold its frames
+**M3 (interaction + widget + demo, plan §19) is under way: steps 1 to 5 have landed, and
+step 6, the minimap and legend, is next.** A view lays out, snaps and draws; T3 and T4 hold its frames
 to committed hashes on every platform; a steady frame allocates nothing; the benches sit
 inside every §15.1 budget. It takes input: `GraphView::{handle, act, tick}` select, hover
 with A4's hover-lift, pin, drag, cycle, navigate, pan and zoom, with time entering only
 through `tick`. `catena-ratatui` draws it as a `Graph` widget and converts crossterm events,
-so plan §13's host loop runs as written. The joined-islands pull the owner ruled for has
+so plan §13's host loop runs as written, and `catena-demo` (`cargo run -p catena-ratatui
+--features demo --bin catena-demo`) shows it. The joined-islands pull the owner ruled for has
 landed switched off, waiting on the owner's call about its cost to invariant F (`## Owner`).
 
 M3 in this order, each step green on its own:
@@ -20,8 +21,7 @@ M3 in this order, each step green on its own:
 2. ~~Hit-testing~~ (plan §10.2): landed (`## M3`, step 2).
 3. ~~The `Controller`~~ (plan §10.1, §10.3, §10.4): landed (`## M3`, steps 3a to 3c).
 4. ~~The widget crate~~: landed (`## M3`, steps 4a and 4b).
-5. `catena-demo` behind `demo`: the community fixture and the 120-node generated one, every
-   binding live, `NO_COLOR` read by the bin and turned into the ascii glyphs and blitter.
+5. ~~`catena-demo` behind `demo`~~: landed (`## M3`, step 5).
 6. Minimap and legend behind `widget-extras` (`seed/ui/vector_minimap.rs` read, then deleted).
 7. The `fuzz/` crate with `fuzz_events` and `fuzz_topology`, and the nightly `fuzz` CI job.
 
@@ -61,6 +61,15 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
 
 ## Decisions
 
+- **M3: the demo runs on `ratatui-crossterm`, not all of `ratatui`.** Plan §3's `demo` is
+  "`crossterm` + optional full `ratatui`"; the demo needs only a crossterm `Backend` for
+  `ratatui-core`'s `Terminal`, which `ratatui-crossterm` 0.1 is, over the same crossterm 0.29.
+  It takes `catena-testkit` as an optional dependency for its fixtures, with a version, so the
+  testkit publishes before `catena-ratatui`. The bin reads the clock, as a host does: its two
+  lines carry `lint-allow: time`, the only allowances in the tree.
+- **M3: the push gate's test step enables `catena-ratatui/demo`.** The demo's own tests need
+  the feature, and `--all-features` would add plan §16.8's PTY tier, which the gate excludes;
+  plan §17's command gains that one flag.
 - **M3: T5 runs on `ratatui-core`'s `TestBackend`, not full `ratatui`.** Plan §3 lists full
   `ratatui` as a dev-dependency "for `TestBackend` in widget tests"; `ratatui-core` 0.1 carries
   `TestBackend` and `Terminal` itself, so the widget crate's tests need nothing past its own
@@ -951,6 +960,21 @@ own `verify:` under `## Later milestones`.
   ten-resize storm holding invariants A and C, and a click in terminal cells selecting the
   node drawn there (seen failing with the origin's column dropped). verify: `cargo test -p
   catena-ratatui --all-features && cargo test -p catena-ratatui -- input:: widget::`
+- [x] **Step 5: `catena-demo`** (plan §19 M3) — `catena-ratatui`'s `demo` feature builds the
+  bin (`src/bin/catena-demo/`): the community fixture and `generated(7, 120)` in the `Graph`
+  widget over all but the last row, a status line naming what happened by label, Tab to switch
+  graphs, `q` or Ctrl+C to quit, and the mouse live. `NO_COLOR` (set, not empty) builds both
+  views with `Blitter::Ascii` and the new `GraphViewBuilder::ascii_glyphs` (lines, boxes and
+  node marks in ASCII) and strips every color, keeping attributes. Tests drive its `App`
+  through `TestBackend`: every binding of the default table changes the frame (seen failing
+  with Enter swallowed), the status line names a label, Tab and the quits, and `NO_COLOR`
+  frames are ASCII in the terminal's own colors (seen failing without `ascii_glyphs` and
+  without the strip). Watched under a pseudo-terminal at 100 × 30: it draws, `n` puts
+  "selected Argonne Research Center" on the status line, `q` exits 0 leaving the alternate
+  screen and mouse capture, and with `NO_COLOR` it sends only SGR 0, 7 and 27 and only ASCII.
+  verify: `cargo test -p catena-ratatui --features demo --bin catena-demo && cargo test -p
+  catena --lib -- ascii_glyphs && cargo build -p catena-ratatui --features demo --bin
+  catena-demo`
 
 ## Course correction (owner rulings A1–A4)
 

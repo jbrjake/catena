@@ -34,7 +34,8 @@ run_step fmt cargo fmt --all -- --check
 run_step lint cargo xtask lint
 run_step clippy cargo clippy --workspace --all-targets --all-features -- -D warnings
 run_step doc env RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
-run_step test cargo test --workspace -- --include-ignored
+# The demo's own tests need its feature; `--all-features` would pull in the PTY tier.
+run_step test cargo test --workspace --features catena-ratatui/demo -- --include-ignored
 passed=$(awk '/^test result: ok\./ { n += $4 } END { print n + 0 }' "$log")
 
 echo "regression: OK, $passed tests passed in $(($(date +%s) - start))s"
