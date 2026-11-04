@@ -7,5 +7,6 @@
 
 pub mod braille_asserts;
 pub mod fixtures;
+pub mod frames;
 pub mod oscillation;
 pub mod svg;

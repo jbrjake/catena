@@ -6,6 +6,7 @@
 use catena::GraphView;
 use catena::raster::{Blitter, CellGrid};
 use catena_testkit::fixtures::{FixtureGraph, community, generated};
+use catena_testkit::oscillation::{diff_count, diff_details, flickers};
 use catena_testkit::svg::assert_visual_snapshot;
 
 /// `graph` drawn into `cols × rows` cells with `blitter`.
@@ -26,6 +27,37 @@ fn the_community_graph_draws_as_committed() {
         (Blitter::Ascii, "community_ascii"),
     ] {
         assert_visual_snapshot(&frame(&graph, blitter, (120, 40)), name);
+    }
+}
+
+#[test]
+fn a_quiescent_view_redrawn_fifty_times_changes_no_cell() {
+    // Plan §16.5's steady state: no hidden time, iteration order or reused canvas may leak into
+    // a frame. Until M3's `tick`, nothing advances between frames at all.
+    for graph in [community(), generated(5, 80)] {
+        let mut gv = graph
+            .view(GraphView::builder())
+            .expect("fixtures are consistent");
+        let frames: Vec<CellGrid> = (0..50)
+            .map(|_| {
+                let mut grid = CellGrid::new(100, 30);
+                gv.render(&mut grid);
+                grid
+            })
+            .collect();
+        assert!(
+            diff_count(&CellGrid::new(100, 30), &frames[0]) > 100,
+            "it draws"
+        );
+        for (i, frame) in frames.iter().enumerate().skip(1) {
+            assert_eq!(
+                diff_count(&frames[0], frame),
+                0,
+                "frame {i}: {:?}",
+                diff_details(&frames[0], frame)
+            );
+        }
+        assert_eq!(flickers(&frames), Vec::<usize>::new());
     }
 }
 

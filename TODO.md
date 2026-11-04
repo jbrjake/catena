@@ -42,8 +42,8 @@ M2 in this order, each step green on its own:
    `LayoutPacing::Animated` needs once `tick` exists.
 5. ~~Layout → `SceneGraph` → `render_to_string`, invariants B–D on real scenes~~: landed as
    `draw::build` and `GraphView::{scene, render, render_to_string}` (`## M2`), with ~~T3 scene
-   snapshots~~ (`catena/tests/catena/scenes.rs`). Left: the T4 tier with the
-   `catena-render-hash` bin and committed hashes; invariants E and N on real scenes.
+   snapshots~~ and ~~the T4 tier~~ (the `catena-render-hash` bin, committed hashes, steady
+   state). Left: invariants E and N on real scenes.
 6. The zero-allocation frame test, the first criterion bench, `scripts/check-perf.sh` with
    `bench-baseline.json`, and the `coverage` and `bench` CI jobs.
 
@@ -733,7 +733,21 @@ Plan §19, in the six steps of `## Now`, each green on its own. The milestone cl
   At the default zoom the 120-node frame saturates its 4,800 cells, so the snapper pushes some
   boxes past the edge and the renderer clips them (plan §6, "clip, don't drop").
   `FixtureGraph::view` loads a fixture into a `GraphView`. verify: `cargo test -p catena --test
-  catena -- scenes:: && test -f catena/tests/visual/community_braille.hash`
+  catena -- scenes:: && test -f catena/tests/visual/community_braille.hash`. CI run
+  41910022430 passed on all three platforms with these hashes.
+- [x] **Step 5c: the T4 tier** — `seed/tests/functional/test_blink_core.rs` harvested by the
+  §18 procedure as `catena-testkit::oscillation`: `diff_count` and `diff_details` over
+  `CellGrid`, the A→B→A detector `flickers`, and `CaptureBuf` for M5's PTY tier.
+  `catena-testkit::frames` names fixtures (`community`, `generated:<seed>:<n>`, at most 5,000
+  nodes) and blitters, and draws them; the `catena-render-hash` bin prints a named frame's hash.
+  The cross-run test spawns it twice for five cases (all four blitters) and compares the two
+  hashes with each other, with the library's own frame, and with `catena-testkit/tests/hashes/`;
+  the community and generated-7 hashes equal their T3 twins. A quiescent view redrawn 50 times
+  changes no cell (seen failing with a pan that drifted a cell per frame). Not yet: §16.5's
+  `tick(16ms)` between frames and the interaction scripts, which need M3's controller.
+  verify: `cargo test -p catena-testkit -- determinism:: oscillation:: && cargo test -p catena
+  --test catena -- a_quiescent_view_redrawn_fifty_times_changes_no_cell && test -z "$(git
+  ls-files seed/tests)"`
 - [x] **Pull joined islands together** (`owner-rulings.md`, "Relayout follow-ups") — the owner:
   "it's not okay for islands to be stretched, they need to pull together." `layout/force/merge`
   moves each island a change joins, but the largest, as one rigid body (sliding and turning)

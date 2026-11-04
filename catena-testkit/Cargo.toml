@@ -21,3 +21,9 @@ sha2.workspace = true
 [[test]]
 name = "catena_testkit"
 path = "tests/catena_testkit/main.rs"
+
+# The cross-run determinism test's subject (plan §3, §16.5): a bin, not an example, because
+# cargo gives tests a path to a package's bins (`CARGO_BIN_EXE_<name>`) and to nothing else.
+[[bin]]
+name = "catena-render-hash"
+path = "src/bin/catena-render-hash.rs"
