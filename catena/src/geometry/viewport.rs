@@ -61,7 +61,6 @@ impl Viewport {
     }
 
     /// The zoom the canonical snap ran at.
-    #[cfg(test)]
     pub(crate) fn ref_zoom(&self) -> f64 {
         self.ref_zoom
     }

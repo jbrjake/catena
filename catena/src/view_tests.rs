@@ -368,6 +368,51 @@ fn crossing_a_semantic_level_relays_out_around_the_reshaped_nodes() {
 }
 
 #[test]
+fn a_pan_while_zoomed_out_never_draws_two_boxes_together() {
+    // Found by fuzz_events. Below the snap's zoom a node is drawn at (c − m)·ratio + m + pan,
+    // rounded, so two dots a canonical cell apart are drawn 0.98 cells apart before rounding,
+    // and the pan's fraction decides whether they round into one cell. Here the zoom glide ends
+    // at 0.1 against a snap at 0.1017, and the glide to the cycled node pans them together.
+    use crate::interact::Action;
+    let graph = catena_testkit::fixtures::generated(5, 40);
+    let mut gv: GraphView<String> = GraphView::new();
+    gv.update(|tx| {
+        for n in &graph.nodes {
+            tx.add_node(n.key.clone(), NodeSpec::label(n.label.clone()))?;
+        }
+        for e in &graph.edges {
+            tx.add_edge(&e.source, &e.target, EdgeSpec::directed())?;
+        }
+        Ok(())
+    })
+    .expect("consistent");
+    gv.render_to_string(300, 100);
+    let mut steps: Vec<&str> = vec!["out"; 4];
+    steps.extend(["prev", "out", "out", "out", "prev", "pin", "tick"]);
+    steps.extend(["out", "out", "out", "out", "prev", "out", "out"]);
+    steps.extend(["tick"; 13]);
+    for (i, s) in steps.iter().enumerate() {
+        match *s {
+            "out" => drop(gv.act(Action::ZoomOut)),
+            "prev" => drop(gv.act(Action::CyclePrev)),
+            "pin" => drop(gv.act(Action::TogglePin)),
+            _ => drop(gv.tick(std::time::Duration::from_millis(250))),
+        }
+        let boxes = drawn(&gv);
+        let meets = boxes
+            .iter()
+            .enumerate()
+            .filter(|(j, a)| boxes[j + 1..].iter().any(|b| intersect(**a, *b)))
+            .count();
+        assert_eq!(meets, 0, "step {i} ({s}) at zoom {}", gv.viewport.zoom());
+    }
+    assert!(
+        gv.viewport.zoom() < 0.1 + 1e-9,
+        "the glide ran out at the clamp"
+    );
+}
+
+#[test]
 fn ascii_glyphs_draw_a_frame_of_plain_ascii() {
     // For a terminal that draws nothing else, such as a `NO_COLOR` host's (plan §7.2): lines,
     // boxes and node marks in ASCII, as the ascii blitter's lines alone are not.

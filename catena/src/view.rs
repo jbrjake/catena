@@ -311,10 +311,16 @@ impl<K: Key> GraphView<K> {
         grid.to_string()
     }
 
-    /// Moves the view by `(dx, dy)` cells; no layout runs (plan §11.2).
+    /// Moves the view by `(dx, dy)` cells; no layout runs (plan §11.2). Below the snap's zoom,
+    /// nodes a cell apart are drawn less than one apart before rounding, so the pan's fraction
+    /// can round two into one cell: what then meets re-snaps, as a zoom out's does (plan §6).
     pub(crate) fn pan_by(&mut self, delta: (f64, f64)) {
         self.viewport.pan_by(delta);
         self.drawing.invalidate();
+        if self.viewport.zoom() < self.viewport.ref_zoom() {
+            let order = placement_order(&self.store);
+            self.viewport.resnap_if_crowded(&self.metrics, &order);
+        }
     }
 
     /// Zooms to `zoom`, keeping the view point `about` where it is. Crossing a semantic level
