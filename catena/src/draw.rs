@@ -36,10 +36,13 @@ pub(crate) const NODE_HOVERED: StyleId = StyleId(3);
 pub(crate) const EDGE_LIFTED: StyleId = StyleId(4);
 /// The placeholder style of the selected edge.
 pub(crate) const EDGE_SELECTED: StyleId = StyleId(5);
+/// The placeholder style of the overview's rectangle of what the view shows.
+pub(crate) const VIEWPORT: StyleId = StyleId(6);
 
 /// The placeholder styles, in 16-color codes, which every color terminal has: nodes in the
 /// terminal's white, reversed when selected and bright and bold when hovered; edges in its
-/// grey, bright white when lifted and bright yellow when selected.
+/// grey, bright white when lifted and bright yellow when selected; the overview's rectangle in
+/// bright cyan.
 pub(crate) fn style(id: StyleId) -> CellStyle {
     let with = |color: u8, attrs: Attrs| CellStyle {
         attrs,
@@ -51,6 +54,7 @@ pub(crate) fn style(id: StyleId) -> CellStyle {
         NODE_HOVERED => with(15, Attrs::BOLD),
         EDGE_LIFTED => with(15, Attrs::NONE),
         EDGE_SELECTED => with(11, Attrs::BOLD),
+        VIEWPORT => with(14, Attrs::NONE),
         _ => with(7, Attrs::NONE),
     }
 }

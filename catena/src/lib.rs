@@ -11,6 +11,7 @@ pub mod geometry;
 pub mod graph;
 pub mod interact;
 mod layout;
+mod overview;
 pub mod raster;
 pub mod scene;
 mod view;
