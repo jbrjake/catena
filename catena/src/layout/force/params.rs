@@ -56,6 +56,11 @@ pub struct ForceParams {
     /// The tether on a node `tether_reach` hops from a change; between one hop and the reach
     /// the tether grows linearly from `tether_near` to this; 30.
     pub tether_far: f64,
+    /// Whether a topology change that joins islands first pulls them together, moving each
+    /// but the largest as one body (the owner's "Relayout follow-ups" ruling; see `merge`).
+    /// Off until the owner rules on its cost to invariant F: on the seeded suite it moves 7%
+    /// of survivors and leaves 87.1% within two cells, against the plan's 90% (`TODO.md`).
+    pub(crate) pull_joined: bool,
 }
 
 impl Default for ForceParams {
@@ -82,6 +87,7 @@ impl ForceParams {
             tether_reach: 2,
             tether_near: 0.1,
             tether_far: 30.0,
+            pull_joined: false,
         }
     }
 

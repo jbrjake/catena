@@ -7,9 +7,10 @@ to exit 0. Milestones and their gates come from plan §19.
 
 **M2 (graph model + force layout + viewport, plan §19) is under way: steps 1 to 4, the graph
 store, `ResolvedMetrics`, the force layout with the relayout rework the owner ruled on, and
-the snapper and viewport, are done (`## M2` below), so `update` now lays out and snaps. Next is
-the owner's joined-islands rework ("Pull joined islands together" under `## M2`), then step 5:
-draw it, layout → `SceneGraph` → `render_to_string`.**
+the snapper and viewport, are done (`## M2` below), so `update` now lays out and snaps. The
+joined-islands pull the owner ruled for has landed switched off, waiting on the owner's call
+about its cost to invariant F (`## Owner`). Next is step 5: draw it, layout → `SceneGraph` →
+`render_to_string`.**
 
 What step 5 inherits: `GraphView::cell(ix)` is where a node's anchor is drawn and
 `Viewport::boxes` every node's drawn box (both waiting on the scene, `expect(dead_code)`);
@@ -212,6 +213,22 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
   less (the worst of 24 keeps 79%), so the test pools all 24 runs' survivors: 1890 of 2053,
   92.1%, against 90%. The threshold is unchanged. Ratified, and the owner ruled out a
   per-run floor: "no per-run floor."
+- **M2: joined islands pull together as rigid bodies, not by freeing them** (owner, "Relayout
+  follow-ups"). Measured on two grids joined by one new node: freeing the islands cannot pull
+  them together, because FR's repulsion reaches across any distance, and a cold layout of the
+  joined graph sets their centroids 160 world units apart, against 59 when packed. So a join
+  first runs `merge::pull_together`: each island of the last layout that the change joins,
+  except the one with the most survivors (then the one holding the canonically first) and any
+  with a pinned node, slides and turns as one body; new nodes move as points. Only the joining
+  springs pull, and bodies of different islands push only within `CONTACT` = 2 ideal distances
+  (Fruchterman and Reingold's own 1991 grid cutoff), so islands close in without overlapping.
+  Steps are damped by stiffness and capped by a Hu temperature, starting hot enough to halve
+  the longest joining edge, since packed islands can sit further apart than the frame is wide.
+  The relayout then runs from the moved places as after any topology change: its FR repulsion
+  re-lengthens the new node's edges from about 1.0–1.3 rest lengths to 1.6–1.9, which is 1.2–1.4
+  of the islands' median edge, while every node past the reach keeps its moved place. `ForceState`
+  now keeps each node's island. Unratified: rigid motion over freeing, the anchor choice, and
+  `CONTACT`.
 - **M2 step 3: the generated families (plan §20) are `fixtures::generated(seed, n)`.** One
   `SplitMix64` stream (checked against Vigna's reference outputs) draws, in order: each node's
   group (one in twenty ungrouped, the rest in contiguous groups of about 12), label (one to
@@ -445,7 +462,8 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
 - **Gates run on the newest stable rustc; CI keeps `toolchain: stable`.** Owner: "just update to
   rust 1.99 so you match latest stable so you don't have conflicts with gh ci." So CI is not
   pinned (plan §17's `check` is "× stable"), and a session switches its local default to the
-  newest stable before gating (`rustup default 1.99` here, where the image's `stable` is 1.97).
+  newest stable before gating (`rustup update stable && rustup default stable`; the image ships
+  1.97, and stable was 1.99.1 at the last update).
   A clippy-lint scope that a release can stop firing takes `allow` with its reason, not
   `expect`, because an unfulfilled expectation fails the gate when clippy's lint set moves.
 - **Only `catena` has a `[[bench]]` target; the other crates set `autobenches = false` and
@@ -691,19 +709,20 @@ Plan §19, in the six steps of `## Now`, each green on its own. The milestone cl
   'invariant_a_no_two_boxes_intersect\|invariant_g_a_relayout_keeps_the_focused_node_where_it_is_drawn\|invariant_i_derived_at_the_snap_zoom_with_no_pan_is_canonical\|an_edit_that_pushes_more_than_eight_nodes_aside_relays_out\|crossing_a_semantic_level_relays_out_around_the_reshaped_nodes\|a_crowding_zoom_out_moves_only_the_nodes_that_meet'
   | grep -qx 6 && cargo test -p catena -- geometry:: view:: && test -z "$(git ls-files
   catena/src/geometry/snap.seed.rs catena/src/geometry/snap_tests.seed.rs)"`
-- [ ] **Pull joined islands together** (`owner-rulings.md`, "Relayout follow-ups") — when a
-  commit's new node or edge joins two islands, the reach-and-tether relayout holds each
-  island's far side, so the islands stay apart and the joining edges stretch. The owner: "it's
-  not okay for islands to be stretched, they need to pull together." The islands a change joins
-  must close toward each other until the joining edges rest near their ideal length
-  `√(kᵢ kⱼ)`. Known tension: an earlier measurement found that letting merged islands slide as
-  rigid bodies lowered F, which stays pooled at 90% with no per-run floor; if the rework cannot
-  hold both, the threshold is not lowered and the conflict goes back to the owner. Lands before
-  step 5. The test's 1.5× bound is a derived threshold, unratified. verify: `cargo test -p
-  catena -- --list | grep -c 'a_node_joining_two_islands_pulls_them_together' | grep -qx 1 &&
-  cargo test -p catena -- layout::force` (the named test: a new node bridging two islands of a
-  generated family; every layout edge of the bridge ends within 1.5× its rest length, and the
-  islands' nearest boxes end closer than before the commit)
+- [x] **Pull joined islands together** (`owner-rulings.md`, "Relayout follow-ups") — the owner:
+  "it's not okay for islands to be stretched, they need to pull together." `layout/force/merge`
+  moves each island a change joins, but the largest, as one rigid body (sliding and turning)
+  until its joining edges rest, before the usual reach-limited relayout; behind the
+  crate-private `ForceParams::pull_joined`, off until the owner rules on invariant F (the
+  question under `## Owner`). The test joins two grids on their facing and their far sides:
+  without the pull, the joined nodes were dragged out of their islands (an own edge grew from
+  13.7 to 36.7) and joining edges ended 1.57 median edges long; with it, at most 1.23× and 1.41
+  medians. Its bounds (joining edges ≤ 1.5 medians of the islands' own edges, a joined node's
+  own edges grow ≤ ⅓) are derived, unratified; the rest length `√(kᵢ kⱼ)` the item first named
+  is no yardstick, since FR's repulsion draws every edge longer than it (the islands' median is
+  1.37 rest lengths). verify: `cargo test -p catena -- --list | grep -c
+  'a_node_joining_two_islands_pulls_them_together\|the_smaller_island_turns_and_slides_until_its_joining_edge_rests\|an_island_with_a_pinned_body_stays_put_even_when_smaller'
+  | grep -qx 3 && cargo test -p catena -- layout::force`
 
 ## Course correction (owner rulings A1–A4)
 
@@ -744,6 +763,15 @@ Each `verify:` lists the named tests first, because a test filter that matches n
 
 ## Owner
 
+- [ ] **Turn on the joined-islands pull, which costs invariant F (needs the owner)** — your
+  ruling ("they need to pull together") and plan §11.3's bound (≥ 90% of survivors within two
+  cells after ≤ 5% additions, pooled, no per-run floor) cannot both hold on the seeded suite.
+  The pull moves only the smaller islands of a join, but the suite joins islands in 11 of its
+  24 runs, moving 147 of 2053 survivors (7.2%) by 130 to 1030 world units: islands pack in one
+  row (the open "Fit the islands" question below), so they sit far apart. Pooled F falls from
+  92.1% to 87.1%. Options: let F exclude nodes a join moves as one body (they keep their
+  shape); lower the bound; or keep the pull off. The threshold is not lowered without you. verify: `grep -n 'pull_joined: true'
+  catena/src/layout/force/params.rs && cargo test -p catena -- layout::force`
 - [ ] **Reserve the crate names on crates.io** — a real `0.0.0` publish of `catena`,
   `catena-ratatui` and `catena-testkit`; the owner's act, recommended before M1 (plan §0).
   verify: `cargo info catena && cargo info catena-ratatui && cargo info catena-testkit`

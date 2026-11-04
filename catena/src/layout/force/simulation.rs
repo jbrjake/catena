@@ -382,7 +382,7 @@ const GOLDEN_ANGLE: f64 = 2.399_963_229_728_653;
 /// else on the starting circle. The circle has radius `√n` times the average width (the seed
 /// says average but used each node's own width, so its circle was not one) and is centered on
 /// the placed bodies, or on the origin when there are none. No aspect factor: plan §6.
-fn start_positions(bodies: &[Body], springs: &[Spring]) -> Vec<(f64, f64)> {
+pub(super) fn start_positions(bodies: &[Body], springs: &[Spring]) -> Vec<(f64, f64)> {
     let n = bodies.len();
     let placed: Vec<Option<(f64, f64)>> = bodies.iter().map(|b| b.pin.or(b.previous)).collect();
     let anchored: Vec<(f64, f64)> = placed.iter().flatten().copied().collect();

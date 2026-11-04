@@ -2,6 +2,7 @@
 //! `bh_threshold` nodes.
 
 mod engine;
+mod merge;
 mod mobility;
 mod params;
 mod quadtree;

@@ -315,3 +315,7 @@ fn a_resize_relays_out_every_node() {
         "a frame of four times the area doubles the ideal distance; edges grew {ratio:.3}×"
     );
 }
+
+// The joined-islands follow-up shares this file's helpers.
+#[path = "join_tests.rs"]
+mod join;

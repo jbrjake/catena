@@ -13,12 +13,16 @@
 //! within reach move as their forces say, each tethered to where it was, loosely next to the
 //! change and firmly at the edge of the reach, and every node beyond holds its place (see
 //! [`mobility`]). After a resize every node is free, and islands and ring are placed afresh.
+//! A topology change that joins islands can first pull them together, moving each but the
+//! largest as one body ([`merge`]); that waits behind `pull_joined` for the owner's ruling on
+//! its cost to invariant F.
 //!
 //! Everything iterates in the store's canonical order, so the result depends on the graph alone,
 //! never on insertion order or slot numbers.
 
 use std::collections::BTreeSet;
 
+use super::merge;
 use super::mobility::{self, Mobility};
 use super::params::ForceParams;
 use super::ring::{self, Placed, RingNode};
@@ -65,6 +69,9 @@ pub(crate) struct ForceState {
     pub(super) neighbors: Vec<Vec<NodeIx>>,
     /// The base ideal distance of the last run, which a resize scales the layout by.
     pub(super) base: Option<f64>,
+    /// Per slot, the island its node was laid out in, numbered within that run; `None` on the
+    /// ring or vacant. What tells a topology relayout which islands it joins.
+    pub(super) islands: Vec<Option<usize>>,
 }
 
 /// Lays out every node of `store` after `change` and writes each one's world position (its
@@ -92,9 +99,14 @@ pub(crate) fn lay_out<K: Key>(
     let n = graph.order.len();
     let mut at = vec![(0.0, 0.0); n];
     let islands = graph.islands();
+    let joins = match change {
+        Change::Topology(_) => graph.last_islands(state),
+        Change::Reshaped(_) | Change::Resize => vec![None; n],
+    };
     let mut placed_box: Option<Bounds> = None;
     let mut free = Vec::new();
     for island in &islands {
+        graph.pull_together(&params, island, &joins, frame.area);
         let (bodies, springs) = graph.bodies(island);
         let placed = bodies.iter().any(|b| b.previous.is_some());
         if bodies.iter().all(|b| b.pin.is_some()) {
@@ -143,6 +155,13 @@ pub(crate) fn lay_out<K: Key>(
         state.neighbors[ix.slot()] = graph.neighbor_keys(i);
     }
     state.base = Some(base);
+    state.islands.clear();
+    state.islands.resize(store.nodes.len(), None);
+    for (k, island) in islands.iter().enumerate() {
+        for &i in island {
+            state.islands[graph.order[i].slot()] = Some(k);
+        }
+    }
 }
 
 /// The graph as the layout sees it, every per-node vector in canonical order.
@@ -249,6 +268,44 @@ impl<'s, K: Key> Graph<'s, K> {
     /// Node `i`'s layout neighbors, as [`ForceState`] keeps them.
     fn neighbor_keys(&self, i: usize) -> Vec<NodeIx> {
         self.view().neighbor_keys(i)
+    }
+
+    /// Per node, the island the last layout in `state` put it in, if it starts where it was.
+    fn last_islands(&self, state: &ForceState) -> Vec<Option<usize>> {
+        self.order
+            .iter()
+            .zip(&self.previous)
+            .map(|(ix, previous)| previous.and(state.islands.get(ix.slot()).copied().flatten()))
+            .collect()
+    }
+
+    /// When `island` joins islands of the last layout (`last[i]` is node `i`'s), slides and
+    /// turns each but the largest toward the rest as one body (see [`merge`]) and starts its
+    /// survivors from there.
+    fn pull_together(
+        &mut self,
+        params: &ForceParams,
+        island: &[usize],
+        last: &[Option<usize>],
+        area: (f64, f64),
+    ) {
+        if !params.pull_joined {
+            return;
+        }
+        let groups: Vec<Option<usize>> = island.iter().map(|&i| last[i]).collect();
+        let mut ids = groups.iter().flatten();
+        let Some(&first) = ids.next() else { return };
+        if ids.all(|&id| id == first) {
+            return;
+        }
+        let (bodies, springs) = self.bodies(island);
+        let pinned: Vec<bool> = island.iter().map(|&i| self.pin[i].is_some()).collect();
+        let moved = merge::pull_together(params, &bodies, &springs, &groups, &pinned, area);
+        for (&i, p) in island.iter().zip(moved) {
+            if self.previous[i].is_some() {
+                self.previous[i] = Some(p);
+            }
+        }
     }
 
     /// The core's connected components, each in canonical order, largest first and then by
