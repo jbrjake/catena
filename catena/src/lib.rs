@@ -5,6 +5,7 @@
 //! random numbers; time enters only through `tick(dt)`, and identical input yields identical
 //! frames on every platform. Terminal adapters live in `catena-ratatui`.
 
+mod draw;
 mod fmath;
 pub mod geometry;
 pub mod graph;

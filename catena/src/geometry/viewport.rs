@@ -79,10 +79,6 @@ impl Viewport {
     }
 
     /// Every placed node's box as drawn now.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the scene (M2 step 5) draws these boxes")
-    )]
     pub(crate) fn boxes<'a>(
         &'a self,
         metrics: &'a ResolvedMetrics,

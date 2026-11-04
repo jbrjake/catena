@@ -5,6 +5,7 @@
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
+use crate::draw::{self, Drawing};
 use crate::geometry::cell::{CellPt, SubPt};
 use crate::geometry::{
     DEFAULT_ZOOM, Fit, Grid, ResolvedMetrics, SemanticZoomTable, Viewport, placement_order,
@@ -14,6 +15,8 @@ use crate::graph::{
 };
 use crate::layout::LayoutKind;
 use crate::layout::force::{Change, ForceState, Frame, lay_out};
+use crate::raster::{Blitter, CellGrid, Surface};
+use crate::scene::{RenderOptions, SceneGraph};
 
 /// The default ceiling on a label's display columns (plan §4.1).
 pub const DEFAULT_MAX_LABEL_COLS: u16 = 256;
@@ -33,9 +36,9 @@ const CASCADE_LIMIT: usize = 8;
 /// An interactive graph keyed by the host's `K` (plan §4.2).
 #[derive(Debug, Clone)]
 pub struct GraphView<K: Key> {
-    store: GraphStore<K>,
+    pub(crate) store: GraphStore<K>,
     /// Every node's form at the current semantic zoom level, kept in step with each commit.
-    metrics: ResolvedMetrics,
+    pub(crate) metrics: ResolvedMetrics,
     /// Every commit since the layout last caught up, absorbed in order, its reshapes cut to
     /// the nodes whose measured box changed. The layout catches up at the end of each
     /// `update`, so it is empty between them.
@@ -43,10 +46,14 @@ pub struct GraphView<K: Key> {
     layout: LayoutKind,
     /// The force layout's world positions and what it keeps between runs.
     force: ForceState,
-    viewport: Viewport,
+    pub(crate) viewport: Viewport,
     /// The node a relayout keeps where it is drawn (plan §6, anchor compensation); the
     /// controller (M3) sets it.
     focus: Option<NodeIx>,
+    /// How frames are drawn.
+    pub(crate) render_options: RenderOptions,
+    /// The scene and compositor frames reuse.
+    drawing: Drawing,
 }
 
 /// Configures a [`GraphView`]; `GraphView::builder().build()` is a complete configuration.
@@ -56,6 +63,7 @@ pub struct GraphViewBuilder<K: Key> {
     layout: LayoutKind,
     fit: Fit,
     cell_aspect: f64,
+    blitter: Blitter,
     key: PhantomData<fn() -> K>,
 }
 
@@ -96,6 +104,14 @@ impl<K: Key> GraphViewBuilder<K> {
         self
     }
 
+    /// Draws edges with `blitter` (default [`Blitter::Braille`]): the trade between
+    /// resolution and colors per cell (plan §7.2).
+    #[must_use]
+    pub fn blitter(mut self, blitter: Blitter) -> Self {
+        self.blitter = blitter;
+        self
+    }
+
     /// The configured view, with an empty graph.
     #[must_use]
     pub fn build(self) -> GraphView<K> {
@@ -114,6 +130,12 @@ impl<K: Key> GraphViewBuilder<K> {
             force: ForceState::default(),
             viewport: Viewport::new(grid, self.fit),
             focus: None,
+            render_options: RenderOptions {
+                blitter: self.blitter,
+                cell_aspect: self.cell_aspect,
+                ..RenderOptions::default()
+            },
+            drawing: Drawing::default(),
         }
     }
 }
@@ -133,6 +155,7 @@ impl<K: Key> GraphView<K> {
             layout: LayoutKind::default(),
             fit: Fit::default(),
             cell_aspect: DEFAULT_CELL_ASPECT,
+            blitter: Blitter::Braille,
             key: PhantomData,
         }
     }
@@ -195,10 +218,40 @@ impl<K: Key> GraphView<K> {
     /// Where node `ix`'s anchor, the middle of its box, is drawn now.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "the scene (M2 step 5) draws nodes where it says")
+        expect(dead_code, reason = "the controller (M3) hit-tests against anchors")
     )]
     pub(crate) fn cell(&self, ix: NodeIx) -> Option<CellPt> {
         self.viewport.cell(ix)
+    }
+
+    /// The scene as the view draws it now (plan §7.4): every node's box and every edge's
+    /// route, in viewport cells.
+    #[must_use]
+    pub fn scene(&self) -> SceneGraph {
+        let mut scene = SceneGraph::new();
+        draw::build(&self.store, &self.metrics, &self.viewport, &mut scene);
+        scene
+    }
+
+    /// Draws the graph onto `surface`, which sets the viewport: a surface of a new size lays
+    /// out for it first (plan §7.1). Total: any graph draws, clipped to the surface.
+    pub fn render<S: Surface + ?Sized>(&mut self, surface: &mut S) {
+        let (cols, rows) = surface.size();
+        self.resize(cols, rows);
+        let Drawing { scene, compositor } = &mut self.drawing;
+        draw::build(&self.store, &self.metrics, &self.viewport, scene);
+        let metrics = &self.metrics;
+        compositor.render(scene, surface, &self.render_options, draw::style, |ix| {
+            metrics.form(ix)
+        });
+    }
+
+    /// The graph drawn into `cols × rows` cells, as text: one line per row, trailing blanks
+    /// trimmed. The no-terminal export (plan §7.1), and the substrate of golden tests.
+    pub fn render_to_string(&mut self, cols: u16, rows: u16) -> String {
+        let mut grid = CellGrid::new(cols, rows);
+        self.render(&mut grid);
+        grid.to_string()
     }
 
     /// Moves the view by `(dx, dy)` cells; no layout runs (plan §11.2).
@@ -226,10 +279,6 @@ impl<K: Key> GraphView<K> {
 
     /// Draws into `cols × rows` cells from now on: a full relayout (owner, "Relayout"), when
     /// the size changed.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "rendering (M2 step 5) resizes to its area")
-    )]
     pub(crate) fn resize(&mut self, cols: u16, rows: u16) {
         let grid = Grid {
             cols,

@@ -40,8 +40,10 @@ M2 in this order, each step green on its own:
    split, zoom-out re-snap, anchor compensation), and `GraphView` lays out and snaps at the end
    of every `update`. `simulation::Run` takes one step at a time, which is what
    `LayoutPacing::Animated` needs once `tick` exists.
-5. Layout → `SceneGraph` → `render_to_string`; T3 scene snapshots; the T4 tier with the
-   `catena-render-hash` bin and committed hashes; invariants B–E and N on real scenes.
+5. ~~Layout → `SceneGraph` → `render_to_string`, invariants B–D on real scenes~~: landed as
+   `draw::build` and `GraphView::{scene, render, render_to_string}` (`## M2`). Left: T3 scene
+   snapshots; the T4 tier with the `catena-render-hash` bin and committed hashes; invariants E
+   and N on real scenes.
 6. The zero-allocation frame test, the first criterion bench, `scripts/check-perf.sh` with
    `bench-baseline.json`, and the `coverage` and `bench` CI jobs.
 
@@ -709,6 +711,20 @@ Plan §19, in the six steps of `## Now`, each green on its own. The milestone cl
   'invariant_a_no_two_boxes_intersect\|invariant_g_a_relayout_keeps_the_focused_node_where_it_is_drawn\|invariant_i_derived_at_the_snap_zoom_with_no_pan_is_canonical\|an_edit_that_pushes_more_than_eight_nodes_aside_relays_out\|crossing_a_semantic_level_relays_out_around_the_reshaped_nodes\|a_crowding_zoom_out_moves_only_the_nodes_that_meet'
   | grep -qx 6 && cargo test -p catena -- geometry:: view:: && test -z "$(git ls-files
   catena/src/geometry/snap.seed.rs catena/src/geometry/snap_tests.seed.rs)"`
+- [x] **Step 5a: draw the layout** — `draw::build` turns the view into a scene: each edge an
+  `EdgePath` on `EdgesUnder`, routed straight from its source's anchor to its target's (a
+  self-loop is its anchor alone), then each node a `NodeBox` on `Nodes` bounded by its drawn
+  box, both in canonical order. `GraphView::scene` returns it; `render(surface)` lays out for
+  the surface's size first (plan §7.1) and draws through a kept `Compositor`;
+  `render_to_string(cols, rows)` is the no-terminal export; the builder gains `blitter`. Items
+  draw in two placeholder styles until §12. Invariants B (one route per edge, anchor to
+  anchor), C (every drawn cell inside an item's bounds, and each item alone inside its own) and
+  D (any insertion order draws the same frame) on generated graphs, the reserved-box rule
+  (ledger row 2) and a T2 golden; each was watched failing against a sabotage (edges dropped,
+  edge bounds cut to a cell, node bounds a column short, the layout in slot order).
+  verify: `cargo test -p catena -- --list | grep -c
+  'invariant_b_every_edge_has_one_route_from_its_source_anchor_to_its_target\|invariant_c_every_drawn_cell_lies_in_an_item_that_drew_it\|invariant_d_any_insertion_order_draws_the_same_frame\|a_node_items_bounds_are_its_measured_box_where_it_is_drawn\|rendering_lays_out_for_the_surface_it_draws_on'
+  | grep -qx 5 && cargo test -p catena -- draw:: && cargo insta test --check`
 - [x] **Pull joined islands together** (`owner-rulings.md`, "Relayout follow-ups") — the owner:
   "it's not okay for islands to be stretched, they need to pull together." `layout/force/merge`
   moves each island a change joins, but the largest, as one rigid body (sliding and turning)
@@ -777,6 +793,22 @@ Each `verify:` lists the named tests first, because a test filter that matches n
   verify: `cargo info catena && cargo info catena-ratatui && cargo info catena-testkit`
 
 ## Found while porting
+
+- [ ] **Draw edges as plan §7.3 has them** — step 5a draws every edge as one straight solid
+  line between anchors. Still to come: `EdgeClass::Curved`'s 20%-perpendicular bow
+  (tessellated, A1) and `Dashed` (arc-length dashes, A1); arrowheads on directed edges;
+  crossing hops (the hop math of `seed/graph/render.rs`, ported by the §18 procedure, with
+  spatial-grid candidates and the 256-hop budget); and, plan §19 M5's, parallel edges fanned by
+  rank with a `CountBadge` past three, and self-loop arcs. Until then a self-loop is invisible
+  under its node's mask and parallel edges overlap. verify: `cargo test -p catena -- --list |
+  grep -c 'curved_edges_bow\|dashed_edges_dash_by_arc_length\|directed_edges_end_in_an_arrowhead\|crossings_hop'
+  | grep -qx 4 && cargo test -p catena -- draw::`
+- [ ] **Themes and the style resolver (plan §12)** — `draw::style` is two placeholder styles
+  (nodes `Ansi(7)`, edges `Ansi(8)`). Plan §12's `StyleResolver`, `Theme` with its four
+  built-ins (`dark`, `light`, `ansi16` ported from `seed/ui/themes/ansi16.rs`, `ascii`) and its
+  `GlyphSet` (replacing `BoxGlyphs`, `LineGlyphs` and `NodeGlyphs`) replace them; the T3 scene
+  hashes re-baseline then, on purpose. verify: `cargo test -p catena -- style:: && test -z
+  "$(git ls-files seed/ui/theme.rs seed/ui/themes)"`
 
 - [x] **Bound the work of a huge segment** — since the M0 port, a line spanning the whole `i32`
   range no longer overflows, but the walk then steps all ~4·10⁹ pixels; since A1 the same holds
