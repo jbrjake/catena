@@ -41,9 +41,9 @@ M2 in this order, each step green on its own:
    of every `update`. `simulation::Run` takes one step at a time, which is what
    `LayoutPacing::Animated` needs once `tick` exists.
 5. ~~Layout → `SceneGraph` → `render_to_string`, invariants B–D on real scenes~~: landed as
-   `draw::build` and `GraphView::{scene, render, render_to_string}` (`## M2`). Left: T3 scene
-   snapshots; the T4 tier with the `catena-render-hash` bin and committed hashes; invariants E
-   and N on real scenes.
+   `draw::build` and `GraphView::{scene, render, render_to_string}` (`## M2`), with ~~T3 scene
+   snapshots~~ (`catena/tests/catena/scenes.rs`). Left: the T4 tier with the
+   `catena-render-hash` bin and committed hashes; invariants E and N on real scenes.
 6. The zero-allocation frame test, the first criterion bench, `scripts/check-perf.sh` with
    `bench-baseline.json`, and the `coverage` and `bench` CI jobs.
 
@@ -725,6 +725,15 @@ Plan §19, in the six steps of `## Now`, each green on its own. The milestone cl
   verify: `cargo test -p catena -- --list | grep -c
   'invariant_b_every_edge_has_one_route_from_its_source_anchor_to_its_target\|invariant_c_every_drawn_cell_lies_in_an_item_that_drew_it\|invariant_d_any_insertion_order_draws_the_same_frame\|a_node_items_bounds_are_its_measured_box_where_it_is_drawn\|rendering_lays_out_for_the_surface_it_draws_on'
   | grep -qx 5 && cargo test -p catena -- draw:: && cargo insta test --check`
+- [x] **Step 5b: T3 snapshots of real scenes** — the community graph at 120 × 40 in braille and
+  ascii, and generated family 7 at 120 nodes in braille, drawn through the public API and
+  hashed with their colors in `catena/tests/visual/`; each frame was read as text before its
+  hash was stored, and a missing hash was seen failing closed. Made on Linux, so CI's macOS and
+  Windows `check` legs are the first cross-platform test of plan §11.5's same-frame guarantee.
+  At the default zoom the 120-node frame saturates its 4,800 cells, so the snapper pushes some
+  boxes past the edge and the renderer clips them (plan §6, "clip, don't drop").
+  `FixtureGraph::view` loads a fixture into a `GraphView`. verify: `cargo test -p catena --test
+  catena -- scenes:: && test -f catena/tests/visual/community_braille.hash`
 - [x] **Pull joined islands together** (`owner-rulings.md`, "Relayout follow-ups") — the owner:
   "it's not okay for islands to be stretched, they need to pull together." `layout/force/merge`
   moves each island a change joins, but the largest, as one rigid body (sliding and turning)

@@ -4,3 +4,4 @@
 mod curves;
 mod graph;
 mod raster;
+mod scenes;

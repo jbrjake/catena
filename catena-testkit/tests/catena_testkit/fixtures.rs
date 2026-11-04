@@ -2,7 +2,27 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use catena_testkit::fixtures::{FixtureError, MAX_FIXTURE_BYTES, community, parse};
+use catena::GraphView;
+use catena_testkit::fixtures::{FixtureError, MAX_FIXTURE_BYTES, community, generated, parse};
+
+#[test]
+fn a_fixture_loads_into_a_view_with_every_node_and_edge() {
+    for graph in [community(), generated(4, 60)] {
+        let gv = graph
+            .view(GraphView::builder())
+            .expect("fixtures are consistent");
+        assert_eq!(
+            (gv.node_count(), gv.edge_count()),
+            (graph.nodes.len(), graph.edges.len())
+        );
+        for node in &graph.nodes {
+            let ix = gv
+                .node_ix(&node.key)
+                .expect("every fixture node is in the view");
+            assert_eq!(gv.key(ix), Some(&node.key));
+        }
+    }
+}
 
 #[test]
 fn community_has_the_shape_plan_section_20_describes() {

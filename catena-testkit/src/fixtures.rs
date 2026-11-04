@@ -6,6 +6,7 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use catena::{EdgeSpec, GraphError, GraphView, GraphViewBuilder, NodeSpec};
 use serde::Deserialize;
 
 mod generated;
@@ -127,4 +128,30 @@ pub fn parse(json: &str) -> Result<FixtureGraph, FixtureError> {
 pub fn community() -> FixtureGraph {
     parse(include_str!("../fixtures/community.json"))
         .expect("the committed community fixture parses and is consistent")
+}
+
+impl FixtureGraph {
+    /// The graph in a view that `builder` configures: every node labelled as the fixture
+    /// says, then every edge, directed, all in the fixture's order and in one commit.
+    ///
+    /// # Errors
+    ///
+    /// The commit's error when the graph is inconsistent (a repeated key, an edge to a missing
+    /// node), which [`parse`] rules out and the generators never produce.
+    pub fn view(
+        &self,
+        builder: GraphViewBuilder<String>,
+    ) -> Result<GraphView<String>, GraphError<String>> {
+        let mut gv = builder.build();
+        gv.update(|tx| {
+            for node in &self.nodes {
+                tx.add_node(node.key.clone(), NodeSpec::label(node.label.clone()))?;
+            }
+            for edge in &self.edges {
+                tx.add_edge(&edge.source, &edge.target, EdgeSpec::directed())?;
+            }
+            Ok(())
+        })?;
+        Ok(gv)
+    }
 }
