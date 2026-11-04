@@ -12,9 +12,21 @@ autobenches = false
 [lints]
 workspace = true
 
+[features]
+# `input::from_crossterm` (plan §10.1).
+crossterm = ["dep:crossterm"]
+
 [dependencies]
 catena.workspace = true
+crossterm = { workspace = true, optional = true }
 ratatui-core.workspace = true
+
+[dev-dependencies]
+catena-testkit.workspace = true
+# `input`'s unit tests build without the feature, as the push gate tests (`lib.rs`).
+crossterm.workspace = true
+insta.workspace = true
+proptest.workspace = true
 
 [[test]]
 name = "catena_ratatui"

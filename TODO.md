@@ -5,24 +5,21 @@ to exit 0. Milestones and their gates come from plan §19.
 
 ## Now
 
-**M3 (interaction + widget + demo, plan §19) is under way: steps 1 to 3 have landed, and
-step 4, the widget crate, is next.** A view lays out, snaps and draws; T3 and T4 hold its
-frames to committed hashes on every platform; a steady frame allocates nothing; the benches
-sit inside every §15.1 budget. It now takes input: `GraphView::{handle, act, tick}` select,
-hover with A4's hover-lift, pin, drag, cycle, navigate, pan and zoom, with time entering only
-through `tick`. The joined-islands pull the owner ruled for has landed switched off, waiting
-on the owner's call about its cost to invariant F (`## Owner`).
+**M3 (interaction + widget + demo, plan §19) is under way: steps 1 to 4 have landed, and
+step 5, `catena-demo`, is next.** A view lays out, snaps and draws; T3 and T4 hold its frames
+to committed hashes on every platform; a steady frame allocates nothing; the benches sit
+inside every §15.1 budget. It takes input: `GraphView::{handle, act, tick}` select, hover
+with A4's hover-lift, pin, drag, cycle, navigate, pan and zoom, with time entering only
+through `tick`. `catena-ratatui` draws it as a `Graph` widget and converts crossterm events,
+so plan §13's host loop runs as written. The joined-islands pull the owner ruled for has
+landed switched off, waiting on the owner's call about its cost to invariant F (`## Owner`).
 
 M3 in this order, each step green on its own:
 
 1. ~~The input model~~ (plan §10.1): landed (`## M3`, step 1).
 2. ~~Hit-testing~~ (plan §10.2): landed (`## M3`, step 2).
 3. ~~The `Controller`~~ (plan §10.1, §10.3, §10.4): landed (`## M3`, steps 3a to 3c).
-4. The widget crate: the `Buffer`-backed `Surface` adapter, the `Graph` `StatefulWidget`
-   (rendering through `GraphView::render` and offsetting pointer events by the widget's area,
-   since the core takes surface cells), and `input::from_crossterm` behind `crossterm`, which
-   maps a held-button drag to `MouseMove` and wheel-up to a positive `Scroll`; T5 `TestBackend`
-   snapshots.
+4. ~~The widget crate~~: landed (`## M3`, steps 4a and 4b).
 5. `catena-demo` behind `demo`: the community fixture and the 120-node generated one, every
    binding live, `NO_COLOR` read by the bin and turned into the ascii glyphs and blitter.
 6. Minimap and legend behind `widget-extras` (`seed/ui/vector_minimap.rs` read, then deleted).
@@ -64,6 +61,15 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
 
 ## Decisions
 
+- **M3: T5 runs on `ratatui-core`'s `TestBackend`, not full `ratatui`.** Plan §3 lists full
+  `ratatui` as a dev-dependency "for `TestBackend` in widget tests"; `ratatui-core` 0.1 carries
+  `TestBackend` and `Terminal` itself, so the widget crate's tests need nothing past its own
+  dependency. Full `ratatui` arrives with the demo (`demo` feature), if it needs its widgets.
+- **M3: `catena_ratatui::input` builds for the crate's tests without its feature.** The push
+  gate tests the workspace without features (plan §17: `--all-features` would pull in the PTY
+  tier), so a feature-gated `from_crossterm` would go untested there. `crossterm` is also a
+  dev-dependency and the module is `cfg(any(feature = "crossterm", test))`; clippy and rustdoc
+  see it with `--all-features`.
 - **M3: pointer events arrive in screen cells, and the surface says where it is.** Plan §13
   passes `from_crossterm`'s event straight to `gv.handle`, in terminal cells, while the widget
   draws in an area of the terminal. The widget's state is the `GraphView` itself, so the view
@@ -930,6 +936,21 @@ own `verify:` under `## Later milestones`.
   plan §13's imports have them. Seen failing with drag moves sent through the hover path, and
   with Shift kept on `BackTab`. verify: `cargo test -p catena --lib -- interact::pointer::tests::on_a_region
   interact::pointer::tests::a_drag_past back_tab`
+- [x] **Step 4b: the widget crate** (plan §3, §7.1, §10.1, §16.6) — `catena-ratatui`:
+  `BufferSurface`, an area of a ratatui `Buffer` as a `Surface` (its corner the origin; colors
+  by ratatui's 16 names on the low four bits, `Rgb` and `Indexed` as they are; attributes by
+  their shared bits), holding `CellGrid`'s width-2 contract by reading glyph widths, since a
+  `Buffer` keeps no spans; `Graph<K>`, a `StatefulWidget` whose state is the `GraphView`; and
+  `input::from_crossterm` behind the `crossterm` feature (crossterm 0.29, only `events`): key
+  presses and repeats with Shift, Ctrl and Alt, the pointer in terminal cells with a drag as a
+  move, the wheel as `±1` notches, resizes; `None` for releases, keys catena has no code for,
+  sideways scrolls, focus and pastes. Tests: the adapter against `CellGrid` as the oracle over
+  random writes at random offsets, nothing written outside the area (seen failing with the
+  release and the shared background each dropped); the widget's frame equals the core's cell
+  for cell at two offsets; T5 through `TestBackend`: a golden beside a sidebar, a seeded
+  ten-resize storm holding invariants A and C, and a click in terminal cells selecting the
+  node drawn there (seen failing with the origin's column dropped). verify: `cargo test -p
+  catena-ratatui --all-features && cargo test -p catena-ratatui -- input:: widget::`
 
 ## Course correction (owner rulings A1–A4)
 
