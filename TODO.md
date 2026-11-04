@@ -854,6 +854,19 @@ own `verify:` under `## Later milestones`.
   and terminals disagree on reporting Shift with `N`), while Shift with an arrow stays
   distinct; rebinding a key keeps its place in the order. The Shift test was seen failing with
   that normalization removed. verify: `cargo test -p catena --lib -- interact::`
+- [x] **Step 2: hit-testing** (plan §10.2) — `seed/app/types_excerpt.rs` harvested by the §18
+  procedure: its `EdgeSpatialGrid` ported as `interact::spatial::SpatialGrid` (any item by
+  number, frame cells, buckets kept across rebuilds); its `PanAnimation` and `ZoomAnimation`
+  staged byte-exact as `interact/animation.seed.rs` for step 3. `interact::hit::HitMap`
+  indexes the kept scene, rebuilt with it, and answers what a cell points at: a node whose
+  drawn box holds it, else the nearest anchor within 3 aspect-corrected cells; else edges within
+  1.5 cells (a shared segment's members, A3); nodes over edges, then topmost layer, smallest
+  bounds and canonical order (ledger row 30). `GraphView::hit` waits on step 3's controller.
+  `seed/app/selection_excerpt.rs` read, then deleted. Tested against a brute-force scan over
+  every cell; invariant J holds at six zooms spanning all six semantic levels (seen failing
+  with a hit map left stale by a zoom). verify: `cargo test -p catena --lib -- interact::
+  invariant_j && test -z "$(git ls-files seed/app/types_excerpt.rs
+  seed/app/selection_excerpt.rs)"`
 
 ## Course correction (owner rulings A1–A4)
 

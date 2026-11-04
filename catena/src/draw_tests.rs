@@ -280,6 +280,65 @@ fn a_pan_or_a_zoom_redraws_the_kept_scene() {
 }
 
 #[test]
+fn invariant_j_a_click_at_a_drawn_box_center_selects_its_node_at_every_level() {
+    // Plan §16.2-J, the ledger's bug 1: hit-testing reads the boxes the renderer draws, at
+    // every semantic level, including level 0's single glyphs, where the seed took a neighbor.
+    // Zooms 0.25, 0.33, 1, 2, 3 and 3.8 fall in levels 0 to 5.
+    let (cols, rows) = (160u16, 60u16);
+    let mut checked = 0;
+    for seed in 0..3 {
+        let mut gv = in_order(&generated(seed, 30));
+        gv.resize(cols, rows);
+        for zoom in [0.25, 0.33, 1.0, 2.0, 3.0, 3.8] {
+            let center = crate::geometry::cell::SubPt {
+                x: f64::from(cols) / 2.0,
+                y: f64::from(rows) / 2.0,
+            };
+            gv.zoom_about(zoom, center);
+            let scene = gv.scene();
+            let boxes: Vec<(crate::graph::NodeIx, CellBox)> = scene
+                .items()
+                .iter()
+                .filter_map(|item| match item.payload {
+                    Payload::NodeBox { ix } => Some((ix, item.bounds)),
+                    _ => None,
+                })
+                .collect();
+            for &(ix, b) in &boxes {
+                let on_frame = b.x >= 0
+                    && b.y >= 0
+                    && b.right() <= i64::from(cols)
+                    && b.bottom() <= i64::from(rows);
+                let mid = CellPt::new(
+                    b.x + i32::try_from(b.width / 2).expect("small"),
+                    b.y + i32::try_from(b.height / 2).expect("small"),
+                );
+                let shared = boxes.iter().any(|&(o, ob)| o != ix && ob.contains(mid));
+                if !on_frame || shared {
+                    continue;
+                }
+                let (x, y) = (
+                    u16::try_from(mid.x).expect("on frame"),
+                    u16::try_from(mid.y).expect("on frame"),
+                );
+                let hit = match gv.hit(x, y) {
+                    Some(crate::interact::hit::Hit::Node(n)) => Some(n),
+                    _ => None,
+                };
+                assert_eq!(
+                    hit,
+                    Some(ix),
+                    "seed {seed}, zoom {zoom}: {:?} at ({x}, {y})",
+                    gv.key(ix)
+                );
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked > 300, "only {checked} boxes checked");
+}
+
+#[test]
 fn invariant_n_on_real_scenes_every_box_draws_exactly_its_cells() {
     // Plan §16.2-N on real layouts: the generated families' labels mix CJK, emoji and
     // combining marks, and each node's form, drawn on its own, fills exactly the cells its box

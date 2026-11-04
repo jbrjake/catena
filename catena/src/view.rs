@@ -13,6 +13,7 @@ use crate::geometry::{
 use crate::graph::{
     Delta, DeltaClass, EdgeId, EdgeRef, GraphError, GraphStore, Key, Limits, NodeIx, Tx,
 };
+use crate::interact::hit::Hit;
 use crate::layout::LayoutKind;
 use crate::layout::force::{Change, ForceState, Frame, lay_out};
 use crate::raster::{Blitter, CellGrid, Surface};
@@ -239,19 +240,42 @@ impl<K: Key> GraphView<K> {
     pub fn render<S: Surface + ?Sized>(&mut self, surface: &mut S) {
         let (cols, rows) = surface.size();
         self.resize(cols, rows);
+        self.refresh();
         let Drawing {
-            scene,
-            compositor,
-            current,
+            scene, compositor, ..
         } = &mut self.drawing;
-        if !*current {
-            draw::build(&self.store, &self.metrics, &self.viewport, scene);
-            *current = true;
-        }
         let metrics = &self.metrics;
         compositor.render(scene, surface, &self.render_options, draw::style, |ix| {
             metrics.form(ix)
         });
+    }
+
+    /// What cell `(x, y)` of the surface points at (plan §10.2), in the scene as drawn now.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "the controller (M3 step 3) hit-tests pointer events"
+        )
+    )]
+    pub(crate) fn hit(&mut self, x: u16, y: u16) -> Option<Hit<'_>> {
+        self.refresh();
+        self.drawing.hits.hit(&self.drawing.scene, (x, y))
+    }
+
+    /// Rebuilds the kept scene and its hit map if the view changed since they were built.
+    fn refresh(&mut self) {
+        if self.drawing.current {
+            return;
+        }
+        let Drawing { scene, hits, .. } = &mut self.drawing;
+        draw::build(&self.store, &self.metrics, &self.viewport, scene);
+        let grid = self.viewport.grid();
+        let viewport = &self.viewport;
+        hits.rebuild(scene, (grid.cols, grid.rows), grid.cell_aspect, |ix| {
+            viewport.cell(ix)
+        });
+        self.drawing.current = true;
     }
 
     /// The graph drawn into `cols × rows` cells, as text: one line per row, trailing blanks

@@ -16,6 +16,7 @@ use std::fmt;
 
 use crate::geometry::{ResolvedMetrics, Viewport};
 use crate::graph::{GraphStore, Key};
+use crate::interact::hit::HitMap;
 use crate::raster::{CellStyle, PaletteColor};
 use crate::scene::{Compositor, EdgeRoute, Layer, Payload, Route, SceneGraph, SceneItem, StyleId};
 
@@ -39,8 +40,10 @@ pub(crate) fn style(id: StyleId) -> CellStyle {
 pub(crate) struct Drawing {
     pub(crate) scene: SceneGraph,
     pub(crate) compositor: Compositor,
-    /// Whether `scene` shows the view as it is now. Anything that changes the graph, a box or
-    /// the viewport clears it, and the next frame rebuilds the scene.
+    /// The scene indexed for hit-testing (plan §10.2), rebuilt with it.
+    pub(crate) hits: HitMap,
+    /// Whether `scene` and `hits` show the view as it is now. Anything that changes the graph,
+    /// a box or the viewport clears it, and the next frame or hit-test rebuilds both.
     pub(crate) current: bool,
 }
 

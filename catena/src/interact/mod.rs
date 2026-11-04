@@ -2,8 +2,10 @@
 //! table between them. The controller that acts on them, with hit-testing, spatial navigation
 //! and animations over `tick(dt)`, joins in later M3 steps.
 
+pub(crate) mod hit;
 mod input;
 mod keymap;
+mod spatial;
 
 pub use input::{Action, Button, Dir, InputEvent, KeyCode, KeyInput, Modifiers};
 pub use keymap::Keymap;
