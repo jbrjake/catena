@@ -368,6 +368,37 @@ fn crossing_a_semantic_level_relays_out_around_the_reshaped_nodes() {
 }
 
 #[test]
+fn ascii_glyphs_draw_a_frame_of_plain_ascii() {
+    // For a terminal that draws nothing else, such as a `NO_COLOR` host's (plan §7.2): lines,
+    // boxes and node marks in ASCII, as the ascii blitter's lines alone are not.
+    let draw = |builder: GraphViewBuilder<String>| {
+        let mut gv = builder.blitter(crate::Blitter::Ascii).build();
+        gv.update(|tx| {
+            tx.add_node("a".to_string(), NodeSpec::label("alpha"))?;
+            tx.add_node(
+                "b".to_string(),
+                NodeSpec::label("a label far too long to show"),
+            )?;
+            let mut pinned = NodeSpec::label("pinned");
+            pinned.pinned = Some((3.0, 9.0));
+            tx.add_node("c".to_string(), pinned)?;
+            tx.add_edge(&"a".into(), &"b".into(), EdgeSpec::directed())?;
+            tx.add_edge(&"b".into(), &"c".into(), EdgeSpec::directed())?;
+            tx.add_edge(&"c".into(), &"a".into(), EdgeSpec::directed())?;
+            Ok(())
+        })
+        .expect("fresh keys");
+        gv.render_to_string(60, 20)
+    };
+    let unicode = draw(GraphView::builder());
+    assert!(!unicode.is_ascii(), "{unicode}");
+    let ascii = draw(GraphView::builder().ascii_glyphs());
+    let strays: Vec<char> = ascii.chars().filter(|c| !c.is_ascii()).collect();
+    assert_eq!(strays, [], "{ascii}");
+    assert!(ascii.contains("alpha") && ascii.contains('~'), "{ascii}");
+}
+
+#[test]
 fn a_resize_relays_out_every_node() {
     // Owner, "Relayout": a resize is a full relayout.
     let mut gv = grid(4);

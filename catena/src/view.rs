@@ -17,8 +17,8 @@ use crate::interact::controller::Controller;
 use crate::interact::hit::Hit;
 use crate::layout::LayoutKind;
 use crate::layout::force::{Change, ForceState, Frame, lay_out};
-use crate::raster::{Blitter, CellGrid, Surface};
-use crate::scene::{RenderOptions, SceneGraph};
+use crate::raster::{Blitter, CellGrid, LineGlyphs, Surface};
+use crate::scene::{BoxGlyphs, NodeGlyphs, RenderOptions, SceneGraph};
 
 /// The default ceiling on a label's display columns (plan §4.1).
 pub const DEFAULT_MAX_LABEL_COLS: u16 = 256;
@@ -67,6 +67,7 @@ pub struct GraphViewBuilder<K: Key> {
     fit: Fit,
     cell_aspect: f64,
     blitter: Blitter,
+    ascii: bool,
     key: PhantomData<fn() -> K>,
 }
 
@@ -115,6 +116,15 @@ impl<K: Key> GraphViewBuilder<K> {
         self
     }
 
+    /// Draws every line, box border and node mark in plain ASCII (`-|/\`, `+`, `~` for the
+    /// ellipsis), for a terminal that draws nothing else; with [`Blitter::Ascii`], a frame is
+    /// ASCII but for its labels. Plan §12's ascii theme will carry these glyphs.
+    #[must_use]
+    pub fn ascii_glyphs(mut self) -> Self {
+        self.ascii = true;
+        self
+    }
+
     /// The configured view, with an empty graph.
     #[must_use]
     pub fn build(self) -> GraphView<K> {
@@ -133,10 +143,20 @@ impl<K: Key> GraphViewBuilder<K> {
             force: ForceState::default(),
             viewport: Viewport::new(grid, self.fit),
             controller: Controller::default(),
-            render_options: RenderOptions {
-                blitter: self.blitter,
-                cell_aspect: self.cell_aspect,
-                ..RenderOptions::default()
+            render_options: if self.ascii {
+                RenderOptions {
+                    blitter: self.blitter,
+                    cell_aspect: self.cell_aspect,
+                    lines: LineGlyphs::ASCII,
+                    boxes: BoxGlyphs::ASCII,
+                    nodes: NodeGlyphs::ASCII,
+                }
+            } else {
+                RenderOptions {
+                    blitter: self.blitter,
+                    cell_aspect: self.cell_aspect,
+                    ..RenderOptions::default()
+                }
             },
             drawing: Drawing::default(),
         }
@@ -159,6 +179,7 @@ impl<K: Key> GraphView<K> {
             fit: Fit::default(),
             cell_aspect: DEFAULT_CELL_ASPECT,
             blitter: Blitter::Braille,
+            ascii: false,
             key: PhantomData,
         }
     }
