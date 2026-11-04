@@ -34,11 +34,21 @@ pub(crate) fn style(id: StyleId) -> CellStyle {
 }
 
 /// What a view keeps from frame to frame to draw: its scene and compositor, whose buffers a
-/// steady frame reuses. Not state: a clone starts empty.
+/// steady frame reuses (plan §15.2). Not state: a clone starts empty.
 #[derive(Default)]
 pub(crate) struct Drawing {
     pub(crate) scene: SceneGraph,
     pub(crate) compositor: Compositor,
+    /// Whether `scene` shows the view as it is now. Anything that changes the graph, a box or
+    /// the viewport clears it, and the next frame rebuilds the scene.
+    pub(crate) current: bool,
+}
+
+impl Drawing {
+    /// The view changed: the next frame rebuilds its scene.
+    pub(crate) fn invalidate(&mut self) {
+        self.current = false;
+    }
 }
 
 impl Clone for Drawing {

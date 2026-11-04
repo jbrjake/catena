@@ -13,12 +13,8 @@ call about its cost to invariant F (`## Owner`). Next is step 6: the zero-alloca
 test, the first criterion bench, `scripts/check-perf.sh` with `bench-baseline.json`, and the
 `coverage` and `bench` CI jobs.**
 
-What step 6 inherits: a frame allocates today. `draw::build` clears the kept scene and pushes
-fresh items, each edge with a new route `Vec`, every frame, and `render_to_string` makes a new
-`CellGrid`; the compositor's own buffers are already reused. Plan §15.2 wants a steady frame to
-allocate nothing, so the scene must be rebuilt only when the layout, viewport or graph changed
-(or its routes' buffers reused), measured by a counting `#[global_allocator]` in `catena`'s
-integration target (its own binary). Invariant F is measured on world positions at the later
+A steady frame into a kept surface now allocates nothing (step 6a); `render_to_string` still
+makes its own `CellGrid`, as an export may. Invariant F is measured on world positions at the later
 layout's `Fit::Contain` scale; with drawing live, read it again on drawn cells, since a refit
 after a node lands outside the old bounding box moves every cell (anchor compensation, plan §6,
 holds only the focused node, and there is none until M3's controller). The owner ruled on M2's
@@ -47,8 +43,8 @@ M2 in this order, each step green on its own:
    B–E and N on real scenes~~: landed (`## M2`, steps 5a to 5d) as `draw::build`,
    `GraphView::{scene, render, render_to_string}`, `catena/tests/visual/`, the
    `catena-render-hash` bin with `catena-testkit/tests/hashes/`, and the invariant tests.
-6. The zero-allocation frame test, the first criterion bench, `scripts/check-perf.sh` with
-   `bench-baseline.json`, and the `coverage` and `bench` CI jobs.
+6. ~~The zero-allocation frame test~~ (step 6a, `## M2`), the first criterion bench,
+   `scripts/check-perf.sh` with `bench-baseline.json`, and the `coverage` and `bench` CI jobs.
 
 The owner's crates.io name reservation is still recommended (plan §0); it blocks nothing.
 
@@ -478,6 +474,12 @@ The owner's crates.io name reservation is still recommended (plan §0); it block
 - **Dependencies enter when first used.** `sha2` arrives with the SVG port (M1), `proptest` with
   the first property test; `catena-ratatui` takes `ratatui-core` at M0 so the lockfile pins the
   version whose `rust-version` (1.88) sets the MSRV (plan §3).
+- **The zero-allocation test counts with `allocation-counter`, not an allocator of our own.**
+  Plan §15.2 asks for a counting `#[global_allocator]` in `catena`'s integration target, but
+  `GlobalAlloc` takes an `unsafe impl` and the workspace forbids `unsafe_code`, and tests run in
+  parallel threads, so a global count would include other tests' allocations. The crate counts
+  per thread and installs its allocator when linked (dev-only, MIT/Apache-2.0, no
+  dependencies); only the integration target links it.
 - **`xtask` pins its dependencies `=x.y.z`; published crates use semver ranges.** `xtask` is
   unpublished, so the baseline pin rule applies to it; override 3 covers the published crates.
 - **The braille assert quartet lives in `catena-testkit` and runs from `catena`'s integration
@@ -761,6 +763,14 @@ Plan §19, in the six steps of `## Now`, each green on its own. The milestone cl
   compositor's cell-to-sub-pixel mapping is now one function. verify: `cargo test -p catena
   --test catena -- invariant_e_every_drawn_edge_is_one_unbroken_line_between_its_ends && cargo
   test -p catena --lib -- invariant_n_on_real_scenes_every_box_draws_exactly_its_cells`
+- [x] **Step 6a: a steady frame allocates nothing** (plan §15.2) — the view keeps its scene
+  and rebuilds it only after an `update`, a pan, a zoom or a new size (`Drawing::current`); the
+  compositor already reused its buffers. Measured by `allocation-counter` (see the decision):
+  generated family 9 at 200 nodes into a kept 200 × 50 grid, the third frame makes 0
+  allocations in every blitter, against 342 (14,848 bytes, braille) before. An edit, a pan and
+  a zoom each redraw (each seen failing with its invalidation removed). verify: `cargo test -p
+  catena --test catena -- frames:: && cargo test -p catena --lib --
+  a_pan_or_a_zoom_redraws_the_kept_scene`
 - [x] **Pull joined islands together** (`owner-rulings.md`, "Relayout follow-ups") — the owner:
   "it's not okay for islands to be stretched, they need to pull together." `layout/force/merge`
   moves each island a change joins, but the largest, as one rigid body (sliding and turning)

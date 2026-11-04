@@ -182,6 +182,7 @@ impl<K: Key> GraphView<K> {
         self.metrics.apply(&self.store, &mut delta);
         self.pending.absorb(delta);
         self.catch_up();
+        self.drawing.invalidate();
         Ok(out)
     }
 
@@ -238,8 +239,15 @@ impl<K: Key> GraphView<K> {
     pub fn render<S: Surface + ?Sized>(&mut self, surface: &mut S) {
         let (cols, rows) = surface.size();
         self.resize(cols, rows);
-        let Drawing { scene, compositor } = &mut self.drawing;
-        draw::build(&self.store, &self.metrics, &self.viewport, scene);
+        let Drawing {
+            scene,
+            compositor,
+            current,
+        } = &mut self.drawing;
+        if !*current {
+            draw::build(&self.store, &self.metrics, &self.viewport, scene);
+            *current = true;
+        }
         let metrics = &self.metrics;
         compositor.render(scene, surface, &self.render_options, draw::style, |ix| {
             metrics.form(ix)
@@ -258,6 +266,7 @@ impl<K: Key> GraphView<K> {
     #[cfg_attr(not(test), expect(dead_code, reason = "the controller (M3) pans"))]
     pub(crate) fn pan_by(&mut self, delta: (f64, f64)) {
         self.viewport.pan_by(delta);
+        self.drawing.invalidate();
     }
 
     /// Zooms to `zoom`, keeping the view point `about` where it is. Crossing a semantic level
@@ -267,6 +276,7 @@ impl<K: Key> GraphView<K> {
     #[cfg_attr(not(test), expect(dead_code, reason = "the controller (M3) zooms"))]
     pub(crate) fn zoom_about(&mut self, zoom: f64, about: SubPt) {
         self.viewport.zoom_about(zoom, about);
+        self.drawing.invalidate();
         let level = self.metrics.level_at(self.viewport.zoom());
         let reshaped = self.metrics.set_level(&self.store, level);
         if reshaped.is_empty() {
@@ -287,6 +297,7 @@ impl<K: Key> GraphView<K> {
         };
         if grid != self.viewport.grid() {
             self.viewport.resize(grid);
+            self.drawing.invalidate();
             self.relayout(Change::Resize);
         }
     }

@@ -2,6 +2,7 @@
 //! never a new file directly under `tests/`.
 
 mod curves;
+mod frames;
 mod graph;
 mod raster;
 mod scenes;

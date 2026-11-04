@@ -266,6 +266,20 @@ fn invariant_d_any_insertion_order_draws_the_same_frame() {
 }
 
 #[test]
+fn a_pan_or_a_zoom_redraws_the_kept_scene() {
+    // A view keeps its scene between frames (plan §15.2), so whatever moves the drawing must
+    // drop it: an edit (the integration tests check), a pan, a zoom, a new size.
+    let mut gv = in_order(&generated(6, 30));
+    let still = gv.render_to_string(100, 30);
+    assert_eq!(gv.render_to_string(100, 30), still, "nothing moved");
+    gv.pan_by((3.0, 1.0));
+    let panned = gv.render_to_string(100, 30);
+    assert_ne!(panned, still, "a pan redraws");
+    gv.zoom_about(1.4, crate::geometry::cell::SubPt { x: 50.0, y: 15.0 });
+    assert_ne!(gv.render_to_string(100, 30), panned, "a zoom redraws");
+}
+
+#[test]
 fn invariant_n_on_real_scenes_every_box_draws_exactly_its_cells() {
     // Plan §16.2-N on real layouts: the generated families' labels mix CJK, emoji and
     // combining marks, and each node's form, drawn on its own, fills exactly the cells its box
