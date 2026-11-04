@@ -867,6 +867,18 @@ own `verify:` under `## Later milestones`.
   with a hit map left stale by a zoom). verify: `cargo test -p catena --lib -- interact::
   invariant_j && test -z "$(git ls-files seed/app/types_excerpt.rs
   seed/app/selection_excerpt.rs)"`
+- [x] **Step 3a: the glides and navigation helpers** — harvested by the §18 procedure:
+  `animation.seed.rs` (the seed's `PanAnimation`, `ZoomAnimation`) ported as
+  `interact::animation` over injected time, a 300 ms ease-out-cubic `PanGlide` that applies
+  only increments in `f64` cells, and a `ZoomGlide` smoothing with `α = 1 − exp(−dt / 40 ms)`
+  that snaps within 0.001; `seed/app/navigation.rs` ported as `interact::navigation`, the
+  0.25 key and 0.08 scroll zoom steps on the current target clamped to `[0.1, 4.0]`, the
+  three-cell pan-to slack, and `visible_center` counting occluded cells once (ledger row 31).
+  `fmath` gains `exp`. Not carried: `force_complete`, the 65% doc comment, the seed's window,
+  palette and data-refresh methods, and its `select_next_entity`, which skipped the first
+  node when none was selected. The timing tests were seen failing with the seed's fixed 35%
+  step. `seed/app/` is gone. verify: `cargo test -p catena --lib -- interact::animation
+  interact::navigation && test ! -e seed/app`
 
 ## Course correction (owner rulings A1–A4)
 

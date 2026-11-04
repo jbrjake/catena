@@ -2,9 +2,22 @@
 //! table between them. The controller that acts on them, with hit-testing, spatial navigation
 //! and animations over `tick(dt)`, joins in later M3 steps.
 
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "the controller (M3 step 3) drives the glides")
+)]
+pub(crate) mod animation;
 pub(crate) mod hit;
 mod input;
 mod keymap;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the controller (M3 step 3) zooms, pans and centers"
+    )
+)]
+pub(crate) mod navigation;
 mod spatial;
 
 pub use input::{Action, Button, Dir, InputEvent, KeyCode, KeyInput, Modifiers};

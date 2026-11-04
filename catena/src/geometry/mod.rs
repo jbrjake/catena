@@ -14,4 +14,4 @@ pub use metrics::{FormShape, Mark, NodeForm, RowLabel};
 pub use snap::Fit;
 pub(crate) use snap::{Grid, placement_order};
 pub(crate) use viewport::Viewport;
-pub(crate) use zoom::{DEFAULT_ZOOM, SemanticZoomTable};
+pub(crate) use zoom::{DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, SemanticZoomTable};

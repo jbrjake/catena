@@ -23,6 +23,18 @@ pub(crate) fn atan2(y: f64, x: f64) -> f64 {
     libm::atan2(y, x)
 }
 
+/// `e` raised to `x`, with the same bits on every platform.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the zoom glide calls it once the controller (M3 step 3) runs"
+    )
+)]
+pub(crate) fn exp(x: f64) -> f64 {
+    libm::exp(x)
+}
+
 #[cfg(test)]
 mod tests {
     // `allow`, not `expect`: clippy 1.99's `float_cmp` no longer fires on these asserts and
@@ -32,12 +44,16 @@ mod tests {
         reason = "the claim is bit-exact values at the points where they are exactly known"
     )]
 
-    use super::{atan2, cos, sin};
+    use super::{atan2, cos, exp, sin};
 
     #[test]
     fn exact_values_hold_bit_for_bit() {
         assert_eq!(sin(0.0), 0.0);
         assert_eq!(cos(0.0), 1.0);
+        assert_eq!(exp(0.0), 1.0);
+        assert_eq!(exp(f64::NEG_INFINITY), 0.0);
+        // Within one ulp of e: an ulp near 2.7 is 2 × EPSILON.
+        assert!((exp(1.0) - std::f64::consts::E).abs() <= 2.0 * f64::EPSILON);
         assert_eq!(
             sin(-0.0).to_bits(),
             (-0.0f64).to_bits(),
