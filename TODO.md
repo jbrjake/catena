@@ -840,6 +840,21 @@ Plan §19, in the six steps of `## Now`, each green on its own. The milestone cl
   'a_node_joining_two_islands_pulls_them_together\|the_smaller_island_turns_and_slides_until_its_joining_edge_rests\|an_island_with_a_pinned_body_stays_put_even_when_smaller'
   | grep -qx 3 && cargo test -p catena -- layout::force`
 
+## M3 — Interaction + widget + demo
+
+Plan §19, in the seven steps of `## Now`, each green on its own. The milestone closes on its
+own `verify:` under `## Later milestones`.
+
+- [x] **Step 1: the input model** (plan §10.1) — `catena::interact`: `InputEvent` (key, mouse
+  down, up and move, scroll, resize), `KeyInput` of a `KeyCode` and `Modifiers` flags,
+  `Button`, `Dir`, `Action` (pan, zoom, cycle, spatial nav, pin, clear, and A4's
+  `ToggleBundling`), and `Keymap`, an ordered table with `bind`, `unbind` and plan §10.1's
+  defaults. Choices of mine, unratified: `b` toggles bundling; `=` zooms in beside `+`, since
+  it is `+` without Shift on most layouts; a character key drops Shift (its case carries it,
+  and terminals disagree on reporting Shift with `N`), while Shift with an arrow stays
+  distinct; rebinding a key keeps its place in the order. The Shift test was seen failing with
+  that normalization removed. verify: `cargo test -p catena --lib -- interact::`
+
 ## Course correction (owner rulings A1–A4)
 
 Quoted in full in `docs/design/owner-rulings.md`, with a table of the plan text each overrides.

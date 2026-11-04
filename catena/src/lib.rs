@@ -9,6 +9,7 @@ mod draw;
 mod fmath;
 pub mod geometry;
 pub mod graph;
+pub mod interact;
 mod layout;
 pub mod raster;
 pub mod scene;
