@@ -3,4 +3,5 @@
 
 mod fixtures;
 mod generated;
+mod oscillation;
 mod svg;
